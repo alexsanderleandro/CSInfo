@@ -21,9 +21,11 @@ def run_powershell(cmd, timeout=20, computer_name=None):
     if computer_name:
         # Adicionar -ComputerName para execução remota
         cmd = f"Invoke-Command -ComputerName {computer_name} -ScriptBlock {{ {cmd} }} -ErrorAction SilentlyContinue"
-    full = ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', cmd]
+    # Forçar codificação UTF-8 no PowerShell
+    cmd_with_encoding = f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {cmd}"
+    full = ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', cmd_with_encoding]
     try:
-        out = subprocess.check_output(full, stderr=subprocess.STDOUT, text=True, timeout=timeout)
+        out = subprocess.check_output(full, stderr=subprocess.STDOUT, text=True, encoding='utf-8', timeout=timeout)
         return out.strip()
     except subprocess.CalledProcessError:
         return ""
@@ -1166,7 +1168,7 @@ def write_report(path, lines):
         f.write("\n".join(filtered_lines))
 
 def organize_pdf_data(lines, computer_name):
-    """Organiza os dados para o PDF conforme a estrutura solicitada"""
+    """Organiza os dados para o PDF conforme a nova estrutura solicitada"""
     # Remover duplicatas
     filtered_lines = remove_duplicate_lines(lines)
     
@@ -1177,64 +1179,75 @@ def organize_pdf_data(lines, computer_name):
     software_info = []
     
     # Variáveis de controle
-    in_software_section = False
+    current_section = ""
     report_date = ""
+    machine_type = ""
     
     for line in filtered_lines:
         line = line.strip()
         if not line:
             continue
             
-        # Capturar data do relatório
-        if line.startswith("Relatório gerado:"):
-            report_date = line.replace("Relatório gerado:", "").strip()
+        # Cabeçalho e informações básicas
+        if line == "CSInfo - Resumo Técnico do Dispositivo":
+            continue
+        elif line == "CSInfo by CEOsoftware":
+            continue  # Rodapé
+        elif line.startswith("Nome do computador"):
+            continue  # Já temos no computer_name
+        elif line.startswith("Tipo:"):
+            machine_type = line.split(': ')[1] if ': ' in line else ""
+            continue
+        elif line.startswith("Relatório gerado em"):
+            report_date = line
             continue
             
-        # Identificar seção de softwares
-        if "SOFTWARES INSTALADOS" in line:
-            in_software_section = True
+        # Detectar seções
+        if line == "INFORMAÇÕES DO SISTEMA":
+            current_section = "sistema"
+            continue
+        elif line == "INFORMAÇÕES DE HARDWARE":
+            current_section = "hardware"
+            continue
+        elif line == "ADMINISTRADORES":
+            current_section = "admin"
+            continue
+        elif line == "SOFTWARES INSTALADOS":
+            current_section = "software"
             continue
             
-        # Se estiver na seção de softwares
-        if in_software_section and line.strip() and not line.startswith("Nenhum"):
-            # Remover numeração se existir
-            clean_line = re.sub(r'^\s*\d+\.\s*', '', line)
-            software_info.append(clean_line)
-            continue
-            
-        # Informações do sistema
-        if any(key in line.lower() for key in ["sistema operacional", "ativação do windows", "ativação do office", "versão do office", "antivírus", "sql server", "rede:"]):
-            sistema_info[line.split(':')[0].strip()] = line
-            continue
-            
-        # Administradores
-        if line.startswith("Administrador"):
-            admin_name = line.split(': ')[1] if ': ' in line else line.replace("Administrador", "").strip()
-            admin_info.append(admin_name)
-            continue
-            
-        # Hardware (resto das informações)
-        if ":" in line and not line.startswith("  "):
-            hardware_info.append(line)
+        # Processar conteúdo baseado na seção
+        if current_section == "sistema":
+            if ":" in line:
+                sistema_info[line.split(':')[0].strip()] = line
+        elif current_section == "hardware":
+            if ":" in line:  # Agora captura tanto linhas principais quanto indentadas
+                hardware_info.append(line)
+        elif current_section == "admin":
+            if line.startswith("Administrador"):
+                admin_name = line.split(': ')[1] if ': ' in line else line.replace("Administrador", "").strip()
+                admin_info.append(admin_name)
+        elif current_section == "software":
+            if line and not line.startswith("Nenhum software"):
+                # Remover numeração se existir
+                clean_line = re.sub(r'^\s*\d+\.\s*', '', line)
+                software_info.append(clean_line)
     
     # Ordenar listas
     admin_info.sort()
     software_info.sort()
     
-    # Organizar hardware por grupos
+    # Organizar hardware por grupos seguindo a nova estrutura
     hardware_groups = {
-        'Placa mãe': [],
-        'Placa de Rede': [],
-        'Rede': [],
-        'Placa de Vídeo': [],
         'Memória': [],
-        'Pente de Memória': [],
         'Processador': [],
         'Disco': [],
-        'Unidade': [],
+        'Monitor': [],
         'Teclado': [],
         'Mouse': [],
-        'Monitor': [],
+        'Placa mãe': [],
+        'Placa de Rede': [],
+        'Placa de Vídeo': [],
         'Impressora': []
     }
     
@@ -1259,6 +1272,7 @@ def organize_pdf_data(lines, computer_name):
     return {
         'report_date': report_date,
         'computer_name': computer_name,
+        'machine_type': machine_type,
         'sistema': sistema_info,
         'hardware': hardware_groups,
         'admins': admin_info,
@@ -1266,13 +1280,13 @@ def organize_pdf_data(lines, computer_name):
     }
 
 def write_pdf_report(path, lines, computer_name):
-    """Gera um relatório em PDF com as informações coletadas"""
+    """Gera um relatório em PDF com as informações coletadas - idêntico ao TXT"""
     try:
         from reportlab.platypus import Table, TableStyle
         from reportlab.lib.enums import TA_LEFT, TA_CENTER
         
-        # Organizar dados
-        data = organize_pdf_data(lines, computer_name)
+        # Remover duplicatas (igual ao TXT)
+        filtered_lines = remove_duplicate_lines(lines)
         
         # Criar documento PDF
         doc = SimpleDocTemplate(path, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
@@ -1299,7 +1313,7 @@ def write_pdf_report(path, lines, computer_name):
             parent=styles['Heading2'],
             fontSize=10,
             spaceAfter=6,
-            spaceBefore=10,
+            spaceBefore=6,
             leading=12,
             textColor=colors.Color(0.15, 0.15, 0.15),  # Cinza 85% (15% preto)
             fontName='Helvetica-Bold',
@@ -1317,15 +1331,28 @@ def write_pdf_report(path, lines, computer_name):
             fontName='Helvetica'
         )
         
-        # Estilo para texto em negrito
-        bold_style = ParagraphStyle(
-            'BoldNormal',
+        # Estilo para texto indentado (com 2 espaços)
+        indented_style = ParagraphStyle(
+            'IndentedNormal',
             parent=styles['Normal'],
             fontSize=9,
             spaceAfter=2,
             leading=11,
             textColor=colors.black,
-            fontName='Helvetica-Bold'
+            fontName='Helvetica',
+            leftIndent=12  # Indentação de 12 pontos
+        )
+        
+        # Estilo para texto muito indentado (com 4 espaços)
+        double_indented_style = ParagraphStyle(
+            'DoubleIndentedNormal',
+            parent=styles['Normal'],
+            fontSize=9,
+            spaceAfter=2,
+            leading=11,
+            textColor=colors.black,
+            fontName='Helvetica',
+            leftIndent=24  # Indentação de 24 pontos
         )
         
         def clean_text(text):
@@ -1336,50 +1363,38 @@ def write_pdf_report(path, lines, computer_name):
                        .replace('"', '&quot;')
                        .replace("'", '&#39;'))
         
-        # CABEÇALHO
-        story.append(Paragraph("CSInfo", header_style))
-        story.append(Spacer(1, 6))
-        
-        # NOME DO COMPUTADOR
-        story.append(Paragraph(f"<b>Computador: {clean_text(data['computer_name'])}</b>", section_title_style))
-        if data['report_date']:
-            story.append(Paragraph(f"Relatório gerado: {data['report_date']}", normal_style))
-        story.append(Spacer(1, 8))
-        
-        # INFORMAÇÕES DO SISTEMA
-        story.append(Paragraph("<b>INFORMAÇÕES DO SISTEMA</b>", section_title_style))
-        for key in sorted(data['sistema'].keys()):
-            line = clean_text(data['sistema'][key])
-            story.append(Paragraph(line, normal_style))
-        story.append(Spacer(1, 8))
-        
-        # INFORMAÇÕES DE HARDWARE
-        story.append(Paragraph("<b>INFORMAÇÕES DE HARDWARE</b>", section_title_style))
-        for group_name in ['Placa mãe', 'Placa de Rede', 'Rede', 'Placa de Vídeo', 'Memória', 
-                          'Pente de Memória', 'Processador', 'Disco', 'Unidade', 'Teclado', 
-                          'Mouse', 'Monitor', 'Impressora']:
-            if data['hardware'][group_name]:
-                for item in data['hardware'][group_name]:
-                    story.append(Paragraph(clean_text(item), normal_style))
-        
-        # Adicionar outros items de hardware não classificados
-        if 'Outros' in data['hardware'] and data['hardware']['Outros']:
-            for item in data['hardware']['Outros']:
-                story.append(Paragraph(clean_text(item), normal_style))
-        story.append(Spacer(1, 8))
-        
-        # ADMINISTRADORES
-        if data['admins']:
-            story.append(Paragraph("<b>ADMINISTRADORES</b>", section_title_style))
-            for i, admin in enumerate(data['admins'], 1):
-                story.append(Paragraph(f"{i}. {clean_text(admin)}", normal_style))
-            story.append(Spacer(1, 8))
-        
-        # SOFTWARES INSTALADOS
-        if data['software']:
-            story.append(Paragraph("<b>SOFTWARES INSTALADOS</b>", section_title_style))
-            for i, software in enumerate(data['software'], 1):
-                story.append(Paragraph(f"{i:3d}. {clean_text(software)}", normal_style))
+        # Processar cada linha exatamente como no TXT
+        for line in filtered_lines:
+            line_stripped = line.strip()
+            
+            # Linha em branco
+            if not line_stripped:
+                story.append(Spacer(1, 6))
+                continue
+            
+            # Cabeçalho principal
+            if line_stripped == "CSInfo - Resumo Técnico do Dispositivo":
+                story.append(Paragraph(clean_text(line_stripped), header_style))
+                continue
+            
+            # Títulos de seções
+            if line_stripped in ["INFORMAÇÕES DO SISTEMA", "INFORMAÇÕES DE HARDWARE", "ADMINISTRADORES", "SOFTWARES INSTALADOS"]:
+                story.append(Paragraph(f"<b>{clean_text(line_stripped)}</b>", section_title_style))
+                continue
+            
+            # Rodapé
+            if line_stripped == "CSInfo by CEOsoftware":
+                story.append(Spacer(1, 12))
+                story.append(Paragraph(clean_text(line_stripped), normal_style))
+                continue
+            
+            # Determinar o estilo baseado na indentação
+            if line.startswith("    "):  # 4 espaços - indentação dupla
+                story.append(Paragraph(clean_text(line_stripped), double_indented_style))
+            elif line.startswith("  "):   # 2 espaços - indentação simples
+                story.append(Paragraph(clean_text(line_stripped), indented_style))
+            else:  # Sem indentação
+                story.append(Paragraph(clean_text(line_stripped), normal_style))
         
         # Gerar PDF
         doc.build(story)
@@ -1444,17 +1459,84 @@ def main():
     path = os.path.join(os.getcwd(), filename)
 
     lines = []
-    lines.append(f"Relatório gerado: {datetime.now().strftime('%d/%m/%Y - %H:%M')}")
     def padrao(valor):
         return valor if valor and str(valor).strip() else "NÃO OBTIDO"
     
+    # CABEÇALHO
+    lines.append("CSInfo - Resumo Técnico do Dispositivo")
+    lines.append("")
+    
+    # NOME DA MÁQUINA E TIPO
     lines.append(f"Nome do computador: {machine}"); barra_progresso(2)
     lines.append(f"Tipo: {'Notebook' if is_laptop(computer_name) else 'Desktop'}"); barra_progresso(3)
-    lines.append(f"Versão do sistema operacional: {get_os_version(computer_name)}"); barra_progresso(4)
-    lines.append(f"Ativação do Windows: {get_windows_activation_status(computer_name)}"); barra_progresso(5)
-    lines.append(f"Rede: {is_domain_computer(computer_name)}"); barra_progresso(6)
+    lines.append("")
     
-    # Informações do processador
+    # DATA DE GERAÇÃO
+    lines.append(f"Relatório gerado em: {datetime.now().strftime('%d/%m/%Y - %H:%M')}")
+    lines.append("")
+    
+    # INFORMAÇÕES DO SISTEMA
+    lines.append("INFORMAÇÕES DO SISTEMA")
+    lines.append(f"Versão do sistema operacional: {get_os_version(computer_name)}"); barra_progresso(4)
+    lines.append(f"  Status do sistema operacional: {get_windows_activation_status(computer_name)}"); barra_progresso(5)
+    lines.append("")  # Linha em branco após Windows
+    lines.append(f"Versão do Office: {get_office_version(computer_name)}"); barra_progresso(6)
+    lines.append(f"  Status do Office: {get_office_activation_status(computer_name)}"); barra_progresso(7)
+    lines.append("")  # Linha em branco após Office
+    
+    # SQL Server
+    sql_instances = get_sql_server_info(computer_name)
+    if sql_instances:
+        for idx, instance in enumerate(sql_instances, start=1):
+            instance_name = padrao(instance.get('Instance', ''))
+            version = padrao(instance.get('Version', ''))
+            status = padrao(instance.get('Status', ''))
+            lines.append(f"SQL Server {idx}: Instância: {instance_name} | Versão: {version} | Status: {status}")
+    else:
+        lines.append("SQL Server: NÃO INSTALADO")
+    lines.append("")  # Linha em branco após SQL Server
+    barra_progresso(8)
+
+    # Antivírus
+    antivirus_list = get_antivirus_info(computer_name)
+    if antivirus_list:
+        for idx, av in enumerate(antivirus_list, start=1):
+            name = padrao(av.get('Name', ''))
+            enabled = padrao(av.get('Enabled', ''))
+            lines.append(f"Antivírus {idx}: {name} | Status: {enabled}")
+    else:
+        lines.append("Antivírus: NÃO DETECTADO")
+    lines.append("")  # Linha em branco após Antivírus
+    barra_progresso(9)
+    
+    lines.append(f"Rede: {is_domain_computer(computer_name)}"); barra_progresso(10)
+    lines.append("")
+    
+    # INFORMAÇÕES DE HARDWARE
+    lines.append("INFORMAÇÕES DE HARDWARE")
+    
+    # MEMÓRIA RAM
+    lines.append(f"Memória RAM total: {get_memory_info(computer_name)}"); barra_progresso(11)
+    
+    # Pentes de memória
+    memory_modules = get_memory_modules_info(computer_name)
+    if memory_modules:
+        for idx, module in enumerate(memory_modules, start=1):
+            manufacturer = padrao(module.get('Manufacturer', ''))
+            part_number = padrao(module.get('PartNumber', ''))
+            capacity = padrao(module.get('Capacity', ''))
+            speed = padrao(module.get('Speed', ''))
+            mem_type = padrao(module.get('MemoryType', ''))
+            form_factor = padrao(module.get('FormFactor', ''))
+            location = padrao(module.get('Location', ''))
+            lines.append(f"  Pente de Memória {idx}: {capacity} | {mem_type} | {speed} | {form_factor}")
+            lines.append(f"    Fabricante: {manufacturer}")
+    else:
+        lines.append("  Pentes de Memória: NÃO OBTIDO")
+    lines.append("")  # Linha em branco após Memória
+    barra_progresso(12)
+    
+    # PROCESSADOR
     processors = get_processor_info(computer_name)
     if processors:
         for idx, cpu in enumerate(processors, start=1):
@@ -1467,33 +1549,15 @@ def main():
             l2_cache = padrao(cpu.get('L2Cache', ''))
             l3_cache = padrao(cpu.get('L3Cache', ''))
             lines.append(f"Processador {idx}: {name}")
-            lines.append(f"  Fabricante: {manufacturer} | Arquitetura: {arch}")
-            lines.append(f"  Cores físicos: {cores} | Cores lógicos: {logical} | Velocidade máxima: {max_speed}")
-            lines.append(f"  Cache L2: {l2_cache} | Cache L3: {l3_cache}")
+            lines.append(f"  Cores: {cores} físicos | {logical} lógicos")
+            lines.append(f"  Cache: L2: {l2_cache} | L3: {l3_cache}")
+            lines.append(f"  Fabricante: {manufacturer}")
     else:
         lines.append("Processador: NÃO OBTIDO")
-    barra_progresso(4)
+    lines.append("")  # Linha em branco após Processador
+    barra_progresso(13)
     
-    lines.append(f"Memória RAM total: {get_memory_info(computer_name)}"); barra_progresso(7)
-    
-    # Informações dos pentes de memória
-    memory_modules = get_memory_modules_info(computer_name)
-    if memory_modules:
-        for idx, module in enumerate(memory_modules, start=1):
-            manufacturer = padrao(module.get('Manufacturer', ''))
-            part_number = padrao(module.get('PartNumber', ''))
-            capacity = padrao(module.get('Capacity', ''))
-            speed = padrao(module.get('Speed', ''))
-            mem_type = padrao(module.get('MemoryType', ''))
-            form_factor = padrao(module.get('FormFactor', ''))
-            location = padrao(module.get('Location', ''))
-            lines.append(f"Pente de Memória {idx}: {capacity} | {mem_type} | {speed} | {form_factor}")
-            lines.append(f"  Fabricante: {manufacturer} | P/N: {part_number} | Localização: {location}")
-    else:
-        lines.append("Pentes de Memória: NÃO OBTIDO")
-    barra_progresso(8)
-    
-    # Discos rígidos
+    # DISCOS
     disks = get_disk_info(computer_name)
     if disks:
         for idx, (modelo, tamanho, espaco_usado, espaco_livre, particoes, tipo, interface) in enumerate(disks, start=1):
@@ -1501,9 +1565,9 @@ def main():
             lines.append(f"  Tipo: {padrao(tipo)} | Interface: {padrao(interface)}")
     else:
         lines.append("Disco: NÃO OBTIDO")
-    barra_progresso(9)
+    barra_progresso(14)
 
-    # Unidades lógicas (partições com espaço disponível)
+    # Unidades (após todos os discos)
     logical_drives = get_logical_drives_info(computer_name)
     if logical_drives:
         for drive in logical_drives:
@@ -1516,22 +1580,35 @@ def main():
             lines.append(f"Unidade {drive_letter} ({label}) | Total: {size} GB | Usado: {used} GB | Livre: {free} GB | Sistema: {file_system}")
     else:
         lines.append("Unidades lógicas: NÃO OBTIDO")
-    barra_progresso(10)
+    lines.append("")  # Linha em branco após unidades lógicas
+    barra_progresso(15)
     
-    lines.append(f"Versão do Office: {get_office_version(computer_name)}"); barra_progresso(11)
-    lines.append(f"Ativação do Office: {get_office_activation_status(computer_name)}"); barra_progresso(12)
-    fabricante_mb, modelo_mb, serial_mb = get_motherboard_info(computer_name)
-    lines.append(f"Placa mãe: {padrao(fabricante_mb)} | Modelo: {padrao(modelo_mb)} | Serial: {padrao(serial_mb)}"); barra_progresso(13)
-
+    # MONITORES
     monitors = get_monitor_infos(computer_name)
     if monitors:
         for idx, m in enumerate(monitors, start=1):
             lines.append(f"Monitor {idx}: {padrao(m.get('Fabricante',''))} | Modelo: {padrao(m.get('Modelo',''))} | Serial: {padrao(m.get('Serial',''))}")
     else:
         lines.append("Monitor 1: NÃO OBTIDO")
-    barra_progresso(14)
+    lines.append("")  # Linha em branco após monitores
+    barra_progresso(16)
+    
+    # TECLADO
+    has_keyboard, has_mouse = get_keyboard_mouse_status(computer_name)
+    lines.append(f"Teclado conectado: {'SIM' if has_keyboard else 'NÃO'}")
+    
+    # MOUSE
+    lines.append(f"Mouse conectado: {'SIM' if has_mouse else 'NÃO'}")
+    lines.append("")  # Linha em branco após teclado/mouse
+    barra_progresso(17)
+    
+    # PLACA MÃE
+    fabricante_mb, modelo_mb, serial_mb = get_motherboard_info(computer_name)
+    lines.append(f"Placa mãe: {padrao(fabricante_mb)} | Modelo: {padrao(modelo_mb)} | Serial: {padrao(serial_mb)}")
+    lines.append("")  # Linha em branco após placa mãe
+    barra_progresso(18)
 
-    # Placas de rede
+    # PLACA DE REDE
     network_adapters = get_network_adapters_info(computer_name)
     if network_adapters:
         for idx, adapter in enumerate(network_adapters, start=1):
@@ -1542,9 +1619,10 @@ def main():
             lines.append(f"Placa de Rede {idx}: {name} | Fabricante: {manufacturer} | Velocidade: {speed} | MAC: {mac}")
     else:
         lines.append("Placa de Rede: NÃO OBTIDO")
-    barra_progresso(15)
+    lines.append("")  # Linha em branco após placa de rede
+    barra_progresso(19)
 
-    # Placas de vídeo
+    # PLACA DE VÍDEO
     video_cards = get_video_cards_info(computer_name)
     if video_cards:
         for idx, card in enumerate(video_cards, start=1):
@@ -1555,38 +1633,21 @@ def main():
             lines.append(f"Placa de Vídeo {idx}: {name} | Fabricante: {manufacturer} | Memória: {memory} | Tipo: {card_type}")
     else:
         lines.append("Placa de Vídeo: NÃO OBTIDO")
-    barra_progresso(16)
+    lines.append("")  # Linha em branco após placa de vídeo
+    barra_progresso(20)
 
-    # Verificar presença de teclado e mouse
-    has_keyboard, has_mouse = get_keyboard_mouse_status(computer_name)
-    lines.append(f"Teclado conectado: {'SIM' if has_keyboard else 'NÃO'}")
-    lines.append(f"Mouse conectado: {'SIM' if has_mouse else 'NÃO'}")
-    barra_progresso(17)
-
-    # Informações do SQL Server
-    sql_instances = get_sql_server_info(computer_name)
-    if sql_instances:
-        for idx, instance in enumerate(sql_instances, start=1):
-            instance_name = padrao(instance.get('Instance', ''))
-            version = padrao(instance.get('Version', ''))
-            status = padrao(instance.get('Status', ''))
-            lines.append(f"SQL Server {idx}: Instância: {instance_name} | Versão: {version} | Status: {status}")
+    # IMPRESSORAS
+    printers = get_printers(computer_name)
+    if printers:
+        for idx, (name, serial, fabricante, modelo) in enumerate(printers, start=1):
+            lines.append(f"Impressora {idx}: {padrao(name)} | Serial/ID: {padrao(serial)} | Fabricante: {padrao(fabricante)} | Modelo: {padrao(modelo)}")
     else:
-        lines.append("SQL Server: NÃO INSTALADO")
-    barra_progresso(18)
-
-    # Informações do Antivírus (sem informação de atualização)
-    antivirus_list = get_antivirus_info(computer_name)
-    if antivirus_list:
-        for idx, av in enumerate(antivirus_list, start=1):
-            name = padrao(av.get('Name', ''))
-            enabled = padrao(av.get('Enabled', ''))
-            lines.append(f"Antivírus {idx}: {name} | Status: {enabled}")
-    else:
-        lines.append("Antivírus: NÃO DETECTADO")
-    barra_progresso(19)
-
-    # Usuários administradores
+        lines.append("Impressora: NÃO OBTIDO")
+    lines.append("")
+    barra_progresso(21)
+    
+    # ADMINISTRADORES (mantém como está)
+    lines.append("ADMINISTRADORES")
     admin_users = get_admin_users(computer_name)
     if admin_users:
         for idx, user in enumerate(admin_users, start=1):
@@ -1595,29 +1656,26 @@ def main():
             lines.append(f"Administrador {idx}: {name}")
     else:
         lines.append("Usuários Administradores: NÃO OBTIDO")
-    barra_progresso(20)
+    barra_progresso(22)
 
-    printers = get_printers(computer_name)
-    if printers:
-        for idx, (name, serial, fabricante, modelo) in enumerate(printers, start=1):
-            lines.append(f"Impressora {idx}: {padrao(name)} | Serial/ID: {padrao(serial)} | Fabricante: {padrao(fabricante)} | Modelo: {padrao(modelo)}")
-    else:
-        lines.append("Impressora: NÃO OBTIDO")
-    barra_progresso(21)
-
-    # Lista de softwares instalados (ordenados por nome)
+    # SOFTWARES INSTALADOS (mantém como está)
     lines.append("")  # Linha em branco para separar
-    lines.append("=== SOFTWARES INSTALADOS ===")
+    lines.append("SOFTWARES INSTALADOS")
     installed_software = get_installed_software(computer_name)
     if installed_software:
         for idx, software in enumerate(installed_software, start=1):
             name = padrao(software.get('Name', ''))
             version = padrao(software.get('Version', ''))
             publisher = padrao(software.get('Publisher', ''))
-            lines.append(f"{idx:3d}. {name} | Versão: {version} | Editor: {publisher}")
+            lines.append(f"{idx}. {name} | Versão: {version} | Editor: {publisher}")
     else:
         lines.append("Nenhum software detectado")
-    barra_progresso(22)
+    barra_progresso(23)
+    
+    # RODAPÉ
+    lines.append("")
+    lines.append("")
+    lines.append("CSInfo by CEOsoftware")
 
     write_report(path, lines)
     barra_progresso(23)

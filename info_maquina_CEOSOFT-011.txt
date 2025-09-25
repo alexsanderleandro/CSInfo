@@ -1,0 +1,51 @@
+﻿CSInfo - Resumo Técnico do Dispositivo
+
+Nome do computador: CEOSOFT-011
+Tipo: Desktop
+
+Relatório gerado em: 25/09/2025 - 17:03
+
+INFORMAÇÕES DO SISTEMA
+Versão do sistema operacional: NÃO OBTIDO
+  Status do sistema operacional: NÃO OBTIDO
+
+Versão do Office: NÃO OBTIDO
+  Status do Office: NÃO OBTIDO
+
+SQL Server: NÃO INSTALADO
+
+Antivírus: NÃO DETECTADO
+
+Rede: NÃO OBTIDO
+
+INFORMAÇÕES DE HARDWARE
+Memória RAM total: NÃO OBTIDO
+  Pentes de Memória: NÃO OBTIDO
+
+Processador: NÃO OBTIDO
+
+Disco 1: NÃO OBTIDO | Tamanho: NÃO OBTIDO
+  Tipo: NÃO OBTIDO | Interface: NÃO OBTIDO
+Unidades lógicas: NÃO OBTIDO
+
+Monitor 1: NÃO OBTIDO | Modelo: NÃO OBTIDO | Serial: NÃO OBTIDO
+
+Teclado conectado: NÃO
+Mouse conectado: NÃO
+
+Placa mãe: NÃO OBTIDO | Modelo: NÃO OBTIDO | Serial: NÃO OBTIDO
+
+Placa de Rede: NÃO OBTIDO
+
+Placa de Vídeo: NÃO OBTIDO
+
+Impressora 1: NÃO OBTIDO | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: NÃO OBTIDO
+
+ADMINISTRADORES
+Usuários Administradores: NÃO OBTIDO
+
+SOFTWARES INSTALADOS
+Nenhum software detectado
+
+
+CSInfo by CEOsoftware
