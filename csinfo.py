@@ -7,6 +7,7 @@ import sys
 import winreg
 from datetime import datetime
 import json
+import time
 
 def run_powershell(cmd, timeout=20):
     full = ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', cmd]
@@ -219,56 +220,78 @@ def write_report(path, lines):
         f.write("\n".join(lines))
 
 def main():
-    machine = get_machine_name()
+    etapas = [
+        "Obtendo nome do computador",
+        "Verificando tipo (Notebook/Desktop)",
+        "Obtendo versão do sistema operacional",
+        "Obtendo versão do Office",
+        "Obtendo informações da placa mãe",
+        "Obtendo informações dos monitores",
+        "Obtendo informações dos teclados",
+        "Obtendo informações dos mouses",
+        "Obtendo informações das impressoras",
+        "Salvando relatório"
+    ]
+    total = len(etapas)
+    inicio = time.time()
+    def barra_progresso(atual):
+        largura = 30
+        perc = int((atual/total)*100)
+        preenchido = int(largura*atual/total)
+        barra = '[' + '#' * preenchido + '-' * (largura-preenchido) + f'] {perc}%'
+        tempo = int(time.time()-inicio)
+        print(f"\r{barra} | {etapas[atual-1]} | Tempo: {tempo}s", end='', flush=True)
+
+    machine = get_machine_name(); barra_progresso(1)
     safe_name = safe_filename(machine)
     filename = f"info_maquina_{safe_name}.txt"
     path = os.path.join(os.getcwd(), filename)
 
     lines = []
     lines.append(f"Relatório gerado: {datetime.now().isoformat()}")
-    lines.append(f"Nome do computador: {machine}")
-    lines.append(f"Tipo: {'Notebook' if is_laptop() else 'Desktop'}")
-    lines.append(f"Versão do sistema operacional: {get_os_version()}")
-    lines.append(f"Versão do Office (se tiver): {get_office_version()}")
+    lines.append(f"Nome do computador: {machine}"); barra_progresso(2)
+    lines.append(f"Tipo: {'Notebook' if is_laptop() else 'Desktop'}"); barra_progresso(3)
+    lines.append(f"Versão do sistema operacional: {get_os_version()}"); barra_progresso(4)
+    lines.append(f"Versão do Office (se tiver): {get_office_version()}"); barra_progresso(5)
     fabricante_mb, modelo_mb, serial_mb = get_motherboard_info()
     def padrao(valor):
         return valor if valor and str(valor).strip() else "NÃO OBTIDO"
-    lines.append(f"Placa mãe: {padrao(fabricante_mb)} | Modelo: {padrao(modelo_mb)} | Serial: {padrao(serial_mb)}")
+    lines.append(f"Placa mãe: {padrao(fabricante_mb)} | Modelo: {padrao(modelo_mb)} | Serial: {padrao(serial_mb)}"); barra_progresso(6)
 
-    # Monitores
     monitors = get_monitor_infos()
     if monitors:
         for idx, m in enumerate(monitors, start=1):
             lines.append(f"Monitor {idx}: {padrao(m.get('Fabricante',''))} | Modelo: {padrao(m.get('Modelo',''))} | Serial: {padrao(m.get('Serial',''))}")
     else:
         lines.append("Monitor 1: NÃO OBTIDO")
+    barra_progresso(7)
 
-    # Teclado
     keyboards = get_devices_by_class("Keyboard")
     if keyboards:
         for idx, (name, serial, fabricante, modelo) in enumerate(keyboards, start=1):
             lines.append(f"Teclado {idx}: {padrao(name)} | Serial/ID: {padrao(serial)} | Fabricante: {padrao(fabricante)} | Modelo: {padrao(modelo)}")
     else:
         lines.append("Teclado: NÃO OBTIDO")
+    barra_progresso(8)
 
-    # Mouse
     mice = get_devices_by_class("Mouse")
     if mice:
         for idx, (name, serial, fabricante, modelo) in enumerate(mice, start=1):
             lines.append(f"Mouse {idx}: {padrao(name)} | Serial/ID: {padrao(serial)} | Fabricante: {padrao(fabricante)} | Modelo: {padrao(modelo)}")
     else:
         lines.append("Mouse: NÃO OBTIDO")
+    barra_progresso(9)
 
-    # Impressoras
     printers = get_printers()
     if printers:
         for idx, (name, serial, fabricante, modelo) in enumerate(printers, start=1):
             lines.append(f"Impressora {idx}: {padrao(name)} | Serial/ID: {padrao(serial)} | Fabricante: {padrao(fabricante)} | Modelo: {padrao(modelo)}")
     else:
         lines.append("Impressora: NÃO OBTIDO")
+    barra_progresso(10)
 
     write_report(path, lines)
-    print(f"Arquivo gerado: {path}")
+    print(f"\nArquivo gerado: {path}")
     resposta = input(f"Deseja abrir o arquivo gerado ({filename})? [s/N]: ").strip().lower()
     if resposta == 's':
         try:

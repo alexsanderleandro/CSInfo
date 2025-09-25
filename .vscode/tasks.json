@@ -12,6 +12,18 @@
 			"isBackground": false,
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "Gerar executável com PyInstaller",
+			"type": "shell",
+			"command": "pyinstaller",
+			"args": [
+				"--onefile",
+				"csinfo.py"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
 		}
 	]
 }
