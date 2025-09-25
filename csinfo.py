@@ -8,6 +8,14 @@ import winreg
 from datetime import datetime
 import json
 import time
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.pdfbase import pdfutils
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import pdfmetrics
 
 def run_powershell(cmd, timeout=20, computer_name=None):
     if computer_name:
@@ -1157,6 +1165,105 @@ def write_report(path, lines):
     with open(path, 'w', encoding='utf-8-sig') as f:
         f.write("\n".join(filtered_lines))
 
+def write_pdf_report(path, lines, computer_name):
+    """Gera um relatório em PDF com as informações coletadas"""
+    try:
+        # Remove duplicidades antes de gerar PDF
+        filtered_lines = remove_duplicate_lines(lines)
+        
+        # Criar documento PDF
+        doc = SimpleDocTemplate(path, pagesize=A4)
+        story = []
+        
+        # Estilos
+        styles = getSampleStyleSheet()
+        
+        # Estilo personalizado para título
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            spaceAfter=30,
+            alignment=1,  # Centralizado
+            textColor=colors.darkblue
+        )
+        
+        # Estilo para subtítulos
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=styles['Heading2'],
+            fontSize=12,
+            spaceAfter=12,
+            textColor=colors.darkgreen
+        )
+        
+        # Estilo para texto normal
+        normal_style = ParagraphStyle(
+            'CustomNormal',
+            parent=styles['Normal'],
+            fontSize=10,
+            spaceAfter=6,
+            leftIndent=0
+        )
+        
+        # Título do documento
+        story.append(Paragraph("Relatório de Informações do Sistema", title_style))
+        story.append(Paragraph(f"Computador: {computer_name}", subtitle_style))
+        story.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y às %H:%M:%S')}", normal_style))
+        story.append(Spacer(1, 20))
+        
+        # Processar linhas do relatório
+        for line in filtered_lines:
+            line = line.strip()
+            if not line:
+                story.append(Spacer(1, 6))
+                continue
+            
+            # Escapar caracteres especiais para XML/HTML e tratar caracteres especiais
+            line = (line.replace('&', '&amp;')
+                       .replace('<', '&lt;')
+                       .replace('>', '&gt;')
+                       .replace('"', '&quot;')
+                       .replace("'", '&#39;')
+                       .replace('ã', 'a')
+                       .replace('á', 'a')
+                       .replace('à', 'a')
+                       .replace('â', 'a')
+                       .replace('é', 'e')
+                       .replace('ê', 'e')
+                       .replace('í', 'i')
+                       .replace('ó', 'o')
+                       .replace('ô', 'o')
+                       .replace('õ', 'o')
+                       .replace('ú', 'u')
+                       .replace('ç', 'c'))
+            
+            # Identificar diferentes tipos de linhas
+            if line.startswith("==="):
+                # Seção especial (como softwares instalados)
+                clean_line = line.replace("=", "").strip()
+                story.append(Spacer(1, 12))
+                story.append(Paragraph(clean_line, subtitle_style))
+                story.append(Spacer(1, 6))
+            elif line.startswith("Relatório gerado:"):
+                # Data de geração
+                story.append(Paragraph(line, normal_style))
+                story.append(Spacer(1, 12))
+            elif ":" in line and not line.startswith("  "):
+                # Linhas principais de informação
+                story.append(Paragraph(f"<b>{line}</b>", normal_style))
+            else:
+                # Linhas de detalhes (indentadas)
+                story.append(Paragraph(line, normal_style))
+        
+        # Gerar PDF
+        doc.build(story)
+        return True
+        
+    except Exception as e:
+        print(f"Erro ao gerar PDF: {e}")
+        return False
+
 def main():
     # Solicitar nome da máquina remota
     print("=== Coletor de Informações de Máquina ===")
@@ -1389,13 +1496,35 @@ def main():
 
     write_report(path, lines)
     barra_progresso(23)
-    print(f"\nArquivo gerado: {path}")
+    print(f"\nArquivo TXT gerado: {path}")
+    
+    # Perguntar se deseja gerar PDF
+    resposta_pdf = input("Deseja gerar também um arquivo PDF? [s/N]: ").strip().lower()
+    pdf_path = None
+    if resposta_pdf == 's':
+        pdf_path = path.replace('.txt', '.pdf')
+        print("Gerando arquivo PDF...")
+        if write_pdf_report(pdf_path, lines, machine):
+            print(f"✅ Arquivo PDF gerado com sucesso: {pdf_path}")
+        else:
+            print("❌ Erro ao gerar arquivo PDF.")
+            pdf_path = None
+    
     resposta = input(f"Deseja abrir o arquivo gerado ({filename})? [s/N]: ").strip().lower()
     if resposta == 's':
         try:
             os.startfile(path)
         except Exception as e:
             print(f"Não foi possível abrir o arquivo: {e}")
+    
+    # Se PDF foi gerado, perguntar se deseja abrir
+    if pdf_path and os.path.exists(pdf_path):
+        resposta_pdf_abrir = input(f"Deseja abrir o arquivo PDF? [s/N]: ").strip().lower()
+        if resposta_pdf_abrir == 's':
+            try:
+                os.startfile(pdf_path)
+            except Exception as e:
+                print(f"Não foi possível abrir o arquivo PDF: {e}")
 
 if __name__ == "__main__":
     main()
