@@ -1165,96 +1165,221 @@ def write_report(path, lines):
     with open(path, 'w', encoding='utf-8-sig') as f:
         f.write("\n".join(filtered_lines))
 
+def organize_pdf_data(lines, computer_name):
+    """Organiza os dados para o PDF conforme a estrutura solicitada"""
+    # Remover duplicatas
+    filtered_lines = remove_duplicate_lines(lines)
+    
+    # Dicionários para organizar as informações
+    sistema_info = {}
+    hardware_info = []
+    admin_info = []
+    software_info = []
+    
+    # Variáveis de controle
+    in_software_section = False
+    report_date = ""
+    
+    for line in filtered_lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Capturar data do relatório
+        if line.startswith("Relatório gerado:"):
+            report_date = line.replace("Relatório gerado:", "").strip()
+            continue
+            
+        # Identificar seção de softwares
+        if "SOFTWARES INSTALADOS" in line:
+            in_software_section = True
+            continue
+            
+        # Se estiver na seção de softwares
+        if in_software_section and line.strip() and not line.startswith("Nenhum"):
+            # Remover numeração se existir
+            clean_line = re.sub(r'^\s*\d+\.\s*', '', line)
+            software_info.append(clean_line)
+            continue
+            
+        # Informações do sistema
+        if any(key in line.lower() for key in ["sistema operacional", "ativação do windows", "ativação do office", "versão do office", "antivírus", "sql server", "rede:"]):
+            sistema_info[line.split(':')[0].strip()] = line
+            continue
+            
+        # Administradores
+        if line.startswith("Administrador"):
+            admin_name = line.split(': ')[1] if ': ' in line else line.replace("Administrador", "").strip()
+            admin_info.append(admin_name)
+            continue
+            
+        # Hardware (resto das informações)
+        if ":" in line and not line.startswith("  "):
+            hardware_info.append(line)
+    
+    # Ordenar listas
+    admin_info.sort()
+    software_info.sort()
+    
+    # Organizar hardware por grupos
+    hardware_groups = {
+        'Placa mãe': [],
+        'Placa de Rede': [],
+        'Rede': [],
+        'Placa de Vídeo': [],
+        'Memória': [],
+        'Pente de Memória': [],
+        'Processador': [],
+        'Disco': [],
+        'Unidade': [],
+        'Teclado': [],
+        'Mouse': [],
+        'Monitor': [],
+        'Impressora': []
+    }
+    
+    # Classificar hardware por grupos
+    for info in hardware_info:
+        assigned = False
+        for group_name in hardware_groups.keys():
+            if group_name.lower() in info.lower():
+                hardware_groups[group_name].append(info)
+                assigned = True
+                break
+        if not assigned:
+            # Se não se encaixar em nenhum grupo específico, adicionar a 'Outros'
+            if 'Outros' not in hardware_groups:
+                hardware_groups['Outros'] = []
+            hardware_groups['Outros'].append(info)
+    
+    # Ordenar dentro de cada grupo
+    for group in hardware_groups.values():
+        group.sort()
+    
+    return {
+        'report_date': report_date,
+        'computer_name': computer_name,
+        'sistema': sistema_info,
+        'hardware': hardware_groups,
+        'admins': admin_info,
+        'software': software_info
+    }
+
 def write_pdf_report(path, lines, computer_name):
     """Gera um relatório em PDF com as informações coletadas"""
     try:
-        # Remove duplicidades antes de gerar PDF
-        filtered_lines = remove_duplicate_lines(lines)
+        from reportlab.platypus import Table, TableStyle
+        from reportlab.lib.enums import TA_LEFT, TA_CENTER
+        
+        # Organizar dados
+        data = organize_pdf_data(lines, computer_name)
         
         # Criar documento PDF
-        doc = SimpleDocTemplate(path, pagesize=A4)
+        doc = SimpleDocTemplate(path, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
         story = []
         
         # Estilos
         styles = getSampleStyleSheet()
         
-        # Estilo personalizado para título
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=16,
-            spaceAfter=30,
-            alignment=1,  # Centralizado
-            textColor=colors.darkblue
+        # Estilo para cabeçalho CSInfo
+        header_style = ParagraphStyle(
+            'CSInfoHeader',
+            parent=styles['Normal'],
+            fontSize=11,
+            textColor=colors.navy,
+            alignment=TA_LEFT,
+            spaceAfter=6,
+            leading=13,
+            fontName='Helvetica-Bold'
         )
         
-        # Estilo para subtítulos
-        subtitle_style = ParagraphStyle(
-            'CustomSubtitle',
+        # Estilo para títulos de seção - cinza 85%
+        section_title_style = ParagraphStyle(
+            'SectionTitle',
             parent=styles['Heading2'],
-            fontSize=12,
-            spaceAfter=12,
-            textColor=colors.darkgreen
+            fontSize=10,
+            spaceAfter=6,
+            spaceBefore=10,
+            leading=12,
+            textColor=colors.Color(0.15, 0.15, 0.15),  # Cinza 85% (15% preto)
+            fontName='Helvetica-Bold',
+            alignment=TA_LEFT
         )
         
         # Estilo para texto normal
         normal_style = ParagraphStyle(
             'CustomNormal',
             parent=styles['Normal'],
-            fontSize=10,
-            spaceAfter=6,
-            leftIndent=0
+            fontSize=9,
+            spaceAfter=2,
+            leading=11,
+            textColor=colors.black,
+            fontName='Helvetica'
         )
         
-        # Título do documento
-        story.append(Paragraph("Relatório de Informações do Sistema", title_style))
-        story.append(Paragraph(f"Computador: {computer_name}", subtitle_style))
-        story.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y às %H:%M:%S')}", normal_style))
-        story.append(Spacer(1, 20))
+        # Estilo para texto em negrito
+        bold_style = ParagraphStyle(
+            'BoldNormal',
+            parent=styles['Normal'],
+            fontSize=9,
+            spaceAfter=2,
+            leading=11,
+            textColor=colors.black,
+            fontName='Helvetica-Bold'
+        )
         
-        # Processar linhas do relatório
-        for line in filtered_lines:
-            line = line.strip()
-            if not line:
-                story.append(Spacer(1, 6))
-                continue
-            
-            # Escapar caracteres especiais para XML/HTML e tratar caracteres especiais
-            line = (line.replace('&', '&amp;')
+        def clean_text(text):
+            """Limpa texto para PDF"""
+            return (text.replace('&', '&amp;')
                        .replace('<', '&lt;')
                        .replace('>', '&gt;')
                        .replace('"', '&quot;')
-                       .replace("'", '&#39;')
-                       .replace('ã', 'a')
-                       .replace('á', 'a')
-                       .replace('à', 'a')
-                       .replace('â', 'a')
-                       .replace('é', 'e')
-                       .replace('ê', 'e')
-                       .replace('í', 'i')
-                       .replace('ó', 'o')
-                       .replace('ô', 'o')
-                       .replace('õ', 'o')
-                       .replace('ú', 'u')
-                       .replace('ç', 'c'))
-            
-            # Identificar diferentes tipos de linhas
-            if line.startswith("==="):
-                # Seção especial (como softwares instalados)
-                clean_line = line.replace("=", "").strip()
-                story.append(Spacer(1, 12))
-                story.append(Paragraph(clean_line, subtitle_style))
-                story.append(Spacer(1, 6))
-            elif line.startswith("Relatório gerado:"):
-                # Data de geração
-                story.append(Paragraph(line, normal_style))
-                story.append(Spacer(1, 12))
-            elif ":" in line and not line.startswith("  "):
-                # Linhas principais de informação
-                story.append(Paragraph(f"<b>{line}</b>", normal_style))
-            else:
-                # Linhas de detalhes (indentadas)
-                story.append(Paragraph(line, normal_style))
+                       .replace("'", '&#39;'))
+        
+        # CABEÇALHO
+        story.append(Paragraph("CSInfo", header_style))
+        story.append(Spacer(1, 6))
+        
+        # NOME DO COMPUTADOR
+        story.append(Paragraph(f"<b>Computador: {clean_text(data['computer_name'])}</b>", section_title_style))
+        if data['report_date']:
+            story.append(Paragraph(f"Relatório gerado: {data['report_date']}", normal_style))
+        story.append(Spacer(1, 8))
+        
+        # INFORMAÇÕES DO SISTEMA
+        story.append(Paragraph("<b>INFORMAÇÕES DO SISTEMA</b>", section_title_style))
+        for key in sorted(data['sistema'].keys()):
+            line = clean_text(data['sistema'][key])
+            story.append(Paragraph(line, normal_style))
+        story.append(Spacer(1, 8))
+        
+        # INFORMAÇÕES DE HARDWARE
+        story.append(Paragraph("<b>INFORMAÇÕES DE HARDWARE</b>", section_title_style))
+        for group_name in ['Placa mãe', 'Placa de Rede', 'Rede', 'Placa de Vídeo', 'Memória', 
+                          'Pente de Memória', 'Processador', 'Disco', 'Unidade', 'Teclado', 
+                          'Mouse', 'Monitor', 'Impressora']:
+            if data['hardware'][group_name]:
+                for item in data['hardware'][group_name]:
+                    story.append(Paragraph(clean_text(item), normal_style))
+        
+        # Adicionar outros items de hardware não classificados
+        if 'Outros' in data['hardware'] and data['hardware']['Outros']:
+            for item in data['hardware']['Outros']:
+                story.append(Paragraph(clean_text(item), normal_style))
+        story.append(Spacer(1, 8))
+        
+        # ADMINISTRADORES
+        if data['admins']:
+            story.append(Paragraph("<b>ADMINISTRADORES</b>", section_title_style))
+            for i, admin in enumerate(data['admins'], 1):
+                story.append(Paragraph(f"{i}. {clean_text(admin)}", normal_style))
+            story.append(Spacer(1, 8))
+        
+        # SOFTWARES INSTALADOS
+        if data['software']:
+            story.append(Paragraph("<b>SOFTWARES INSTALADOS</b>", section_title_style))
+            for i, software in enumerate(data['software'], 1):
+                story.append(Paragraph(f"{i:3d}. {clean_text(software)}", normal_style))
         
         # Gerar PDF
         doc.build(story)
@@ -1319,7 +1444,7 @@ def main():
     path = os.path.join(os.getcwd(), filename)
 
     lines = []
-    lines.append(f"Relatório gerado: {datetime.now().isoformat()}")
+    lines.append(f"Relatório gerado: {datetime.now().strftime('%d/%m/%Y - %H:%M')}")
     def padrao(valor):
         return valor if valor and str(valor).strip() else "NÃO OBTIDO"
     
