@@ -9,7 +9,10 @@ from datetime import datetime
 import json
 import time
 
-def run_powershell(cmd, timeout=20):
+def run_powershell(cmd, timeout=20, computer_name=None):
+    if computer_name:
+        # Adicionar -ComputerName para execução remota
+        cmd = f"Invoke-Command -ComputerName {computer_name} -ScriptBlock {{ {cmd} }} -ErrorAction SilentlyContinue"
     full = ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', cmd]
     try:
         out = subprocess.check_output(full, stderr=subprocess.STDOUT, text=True, timeout=timeout)
@@ -23,21 +26,282 @@ def safe_filename(s):
     # remove caracteres inválidos para nome de arquivo
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', s)
 
-def get_machine_name():
+def get_machine_name(computer_name=None):
+    if computer_name:
+        return computer_name
     return platform.node() or "Desconhecido"
 
-def get_os_version():
-    cmd = "(Get-CimInstance Win32_OperatingSystem | Select-Object -Property Caption,Version | ConvertTo-Json -Compress)"
-    out = run_powershell(cmd)
+def get_os_version(computer_name=None):
+    cmd = "(Get-CimInstance Win32_OperatingSystem | Select-Object -Property Caption,Version,OSArchitecture | ConvertTo-Json -Compress)"
+    out = run_powershell(cmd, computer_name=computer_name)
     m_caption = re.search(r'"Caption"\s*:\s*"([^"]+)"', out)
     m_version = re.search(r'"Version"\s*:\s*"([^"]+)"', out)
+    m_arch = re.search(r'"OSArchitecture"\s*:\s*"([^"]+)"', out)
     caption = m_caption.group(1) if m_caption else ""
     version = m_version.group(1) if m_version else ""
+    arch = m_arch.group(1) if m_arch else ""
     if caption:
-        return f"{caption} (Version {version})" if version else caption
-    return platform.platform()
+        result = f"{caption} (Version {version})" if version else caption
+        if arch:
+            result += f" - {arch}"
+        return result
+    return "NÃO OBTIDO"
 
-def get_office_version():
+def get_memory_info(computer_name=None):
+    cmd = "(Get-CimInstance Win32_ComputerSystem | Select-Object -Property TotalPhysicalMemory | ConvertTo-Json -Compress)"
+    out = run_powershell(cmd, computer_name=computer_name)
+    try:
+        m_memory = re.search(r'"TotalPhysicalMemory"\s*:\s*(\d+)', out)
+        if m_memory:
+            total_bytes = int(m_memory.group(1))
+            total_gb = round(total_bytes / (1024**3), 2)
+            return f"{total_gb} GB"
+    except Exception:
+        pass
+    return "NÃO OBTIDO"
+
+def get_disk_info(computer_name=None):
+    ps = r"""
+    $disks = @()
+    try {
+        $physicalDisks = Get-CimInstance Win32_DiskDrive -ErrorAction SilentlyContinue
+        foreach ($disk in $physicalDisks) {
+            $model = $disk.Model
+            $size = [math]::Round($disk.Size / 1GB, 2)
+            $mediaType = $disk.MediaType
+            $interface = $disk.InterfaceType
+            
+            # Tentar determinar se é SSD ou HDD
+            $diskType = "HDD"
+            if ($mediaType -like "*SSD*" -or $model -like "*SSD*" -or $model -like "*Solid State*") {
+                $diskType = "SSD"
+            } elseif ($mediaType -like "*Fixed*" -or $interface -eq "SCSI") {
+                # Usar SMART para detectar SSD (método alternativo)
+                try {
+                    $smartData = Get-WmiObject -Namespace root\wmi -Class MSStorageDriver_FailurePredictData -ErrorAction SilentlyContinue | Where-Object {$_.InstanceName -like "*$($disk.PNPDeviceID)*"}
+                    if ($smartData) {
+                        $diskType = "SSD"
+                    }
+                } catch {}
+            }
+            
+            # Obter informações de espaço das partições associadas ao disco físico
+            $totalUsed = 0
+            $totalFree = 0
+            $partitions = ""
+            
+            try {
+                # Método mais direto: obter partições pelo índice do disco
+                $associatedPartitions = Get-CimInstance -Query "ASSOCIATORS OF {Win32_DiskDrive.DeviceID='$($disk.DeviceID)'} WHERE AssocClass=Win32_DiskDriveToDiskPartition" -ErrorAction SilentlyContinue
+                
+                foreach ($partition in $associatedPartitions) {
+                    $logicalDisks = Get-CimInstance -Query "ASSOCIATORS OF {Win32_DiskPartition.DeviceID='$($partition.DeviceID)'} WHERE AssocClass=Win32_LogicalDiskToDiskPartition" -ErrorAction SilentlyContinue
+                    
+                    foreach ($logicalDisk in $logicalDisks) {
+                        if ($logicalDisk.Size) {
+                            $driveSize = [math]::Round($logicalDisk.Size / 1GB, 2)
+                            $driveFree = [math]::Round($logicalDisk.FreeSpace / 1GB, 2)
+                            $driveUsed = $driveSize - $driveFree
+                            $totalUsed += $driveUsed
+                            $totalFree += $driveFree
+                            if ($partitions) { $partitions += ", " }
+                            $partitions += "$($logicalDisk.DeviceID) ($driveFree GB livre de $driveSize GB)"
+                        }
+                    }
+                }
+                
+                # Se o método acima não funcionou, tentar método alternativo
+                if ($totalFree -eq 0 -and $totalUsed -eq 0) {
+                    $diskPartitions = Get-CimInstance Win32_DiskPartition -ErrorAction SilentlyContinue | Where-Object { $_.DiskIndex -eq $disk.Index }
+                    foreach ($partition in $diskPartitions) {
+                        $logicalDisks = Get-CimInstance Win32_LogicalDiskToDiskPartition -ErrorAction SilentlyContinue | Where-Object { $_.Antecedent -like "*$($partition.DeviceID)*" }
+                        foreach ($logicalDiskRel in $logicalDisks) {
+                            $deviceId = ($logicalDiskRel.Dependent -split '"')[1]
+                            $drive = Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DeviceID -eq $deviceId }
+                            if ($drive -and $drive.Size) {
+                                $driveSize = [math]::Round($drive.Size / 1GB, 2)
+                                $driveFree = [math]::Round($drive.FreeSpace / 1GB, 2)
+                                $driveUsed = $driveSize - $driveFree
+                                $totalUsed += $driveUsed
+                                $totalFree += $driveFree
+                                if ($partitions) { $partitions += ", " }
+                                $partitions += "$($drive.DeviceID) ($driveFree GB livre de $driveSize GB)"
+                            }
+                        }
+                    }
+                }
+            } catch {}
+            
+            $espacoLivre = if ($totalFree -gt 0) { "$totalFree GB" } else { "N/A" }
+            $espacoUsado = if ($totalUsed -gt 0) { "$totalUsed GB" } else { "N/A" }
+            $particoesInfo = if ($partitions) { $partitions } else { "N/A" }
+            
+            $disks += [PSCustomObject]@{
+                Modelo = $model
+                Tamanho = "$size GB"
+                EspacoUsado = $espacoUsado
+                EspacoLivre = $espacoLivre
+                Particoes = $particoesInfo
+                Tipo = $diskType
+                Interface = $interface
+            }
+        }
+    } catch {}
+    $disks | ConvertTo-Json -Compress
+    """
+    out = run_powershell(ps, computer_name=computer_name)
+    items = []
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        for disk in parsed:
+            modelo = disk.get('Modelo', 'NÃO OBTIDO')
+            tamanho = disk.get('Tamanho', 'NÃO OBTIDO')
+            espaco_usado = disk.get('EspacoUsado', 'NÃO OBTIDO')
+            espaco_livre = disk.get('EspacoLivre', 'NÃO OBTIDO')
+            particoes = disk.get('Particoes', 'NÃO OBTIDO')
+            tipo = disk.get('Tipo', 'NÃO OBTIDO')
+            interface = disk.get('Interface', 'NÃO OBTIDO')
+            items.append((modelo, tamanho, espaco_usado, espaco_livre, particoes, tipo, interface))
+    except Exception:
+        pass
+    return items or [("NÃO OBTIDO", "NÃO OBTIDO", "NÃO OBTIDO", "NÃO OBTIDO", "NÃO OBTIDO", "NÃO OBTIDO", "NÃO OBTIDO")]
+
+def get_windows_activation_status(computer_name=None):
+    try:
+        ps_command = r'''
+        try {
+            # Usar slmgr diretamente
+            $slmgrResult = & cscript //nologo C:\Windows\System32\slmgr.vbs /xpr
+            $output = $slmgrResult -join "`n"
+            
+            # Verificar diferentes padrões de texto para ativação
+            if ($output -match "ativada permanentemente|permanently activated|permanently|permanente") {
+                "Ativado"
+            } elseif ($output -match "grace period|período de carência|carência") {
+                "Período de carência"
+            } elseif ($output -match "notification|notificação") {
+                "Período de notificação"
+            } elseif ($output -match "not activated|não ativado|não está ativado") {
+                "Não ativado"
+            } else {
+                # Se não conseguir interpretar, retornar a saída original limpa
+                ($output -replace "`r", "" -replace "`n", " ").Trim()
+            }
+        } catch {
+            try {
+                # Método alternativo usando Get-WmiObject
+                $licenses = Get-WmiObject -Class SoftwareLicensingProduct | Where-Object {
+                    $_.Name -like "*Windows*" -and $_.PartialProductKey -ne $null
+                } | Select-Object -First 1
+                
+                if ($licenses) {
+                    switch ($licenses.LicenseStatus) {
+                        1 { "Ativado" }
+                        0 { "Não licenciado" }
+                        2 { "Período de carência" }
+                        3 { "OOT (Out of Tolerance)" }
+                        4 { "OOB (Out of Box)" }
+                        5 { "Notificação" }
+                        6 { "Carência estendida" }
+                        default { "Status desconhecido: $($licenses.LicenseStatus)" }
+                    }
+                } else {
+                    "Nenhuma licença encontrada"
+                }
+            } catch {
+                "Erro na verificação"
+            }
+        }
+        '''
+        
+        result = run_powershell(ps_command, computer_name=computer_name)
+        return result.strip() if result and result.strip() else "NÃO OBTIDO"
+    except Exception as e:
+        return f"ERRO: {str(e)}"
+
+def get_office_activation_status(computer_name=None):
+    try:
+        ps_command = '''
+        try {
+            # Verificar Office através do registro
+            $officeApps = @("Word", "Excel", "PowerPoint", "Outlook")
+            $activated = $false
+            
+            foreach ($app in $officeApps) {
+                try {
+                    $comObject = New-Object -ComObject "$app.Application"
+                    if ($comObject) {
+                        $activated = $true
+                        $comObject.Quit()
+                        break
+                    }
+                } catch {}
+            }
+            
+            if ($activated) {
+                "Ativado"
+            } else {
+                # Método alternativo: verificar chaves de ativação no registro
+                $regPaths = @(
+                    "HKLM:\\SOFTWARE\\Microsoft\\Office\\*\\Registration",
+                    "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Office\\*\\Registration"
+                )
+                
+                $foundActivation = $false
+                foreach ($path in $regPaths) {
+                    try {
+                        $items = Get-ChildItem $path -ErrorAction SilentlyContinue
+                        if ($items) {
+                            $foundActivation = $true
+                            break
+                        }
+                    } catch {}
+                }
+                
+                if ($foundActivation) {
+                    "Possivelmente ativado"
+                } else {
+                    "Não detectado"
+                }
+            }
+        } catch {
+            "NÃO OBTIDO"
+        }
+        '''
+        
+        result = run_powershell(ps_command, computer_name=computer_name)
+        return result.strip() if result and result.strip() else "NÃO OBTIDO"
+    except:
+        return "NÃO OBTIDO"
+
+def is_domain_computer(computer_name=None):
+    try:
+        ps_command = '''
+        $computer = Get-CimInstance -ClassName Win32_ComputerSystem
+        if ($computer.PartOfDomain) {
+            "Domínio: $($computer.Domain)"
+        } else {
+            "Workgroup: $($computer.Workgroup)"
+        }
+        '''
+        
+        result = run_powershell(ps_command, computer_name=computer_name)
+        return result.strip() if result and result.strip() else "NÃO OBTIDO"
+    except:
+        return "NÃO OBTIDO"
+
+def get_office_version(computer_name=None):
+    if computer_name:
+        # Para máquinas remotas, usar PowerShell para verificar registry
+        cmd = """
+        $apps = Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* -ErrorAction SilentlyContinue | Where-Object {$_.DisplayName -like "*Office*" -or $_.DisplayName -like "*Microsoft 365*"}
+        if ($apps) { ($apps | Select-Object -First 1).DisplayName + " " + ($apps | Select-Object -First 1).DisplayVersion } else { "Não encontrado" }
+        """
+        return run_powershell(cmd, computer_name=computer_name) or "NÃO OBTIDO"
+    
+    # Código original para máquina local
     keys = [
         r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
         r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
@@ -75,11 +339,11 @@ def get_office_version():
         out = run_powershell(cmd)
         if out:
             results.append("Word.Application version " + out.strip())
-    return results[0] if results else "Não encontrado"
+    return results[0] if results else "NÃO OBTIDO"
 
-def get_motherboard_info():
+def get_motherboard_info(computer_name=None):
     cmd = "(Get-CimInstance Win32_BaseBoard | Select-Object Manufacturer,Product,SerialNumber | ConvertTo-Json -Compress)"
-    out = run_powershell(cmd)
+    out = run_powershell(cmd, computer_name=computer_name)
     try:
         info = json.loads(out) if out else {}
         if isinstance(info, list):
@@ -89,9 +353,9 @@ def get_motherboard_info():
         serial = info.get('SerialNumber', '')
         return fabricante, modelo, serial
     except Exception:
-        return "", "", "Não encontrado"
+        return "", "", "NÃO OBTIDO"
 
-def get_monitor_infos():
+def get_monitor_infos(computer_name=None):
         ps = r"""
         $s = @()
         try {
@@ -106,16 +370,16 @@ def get_monitor_infos():
         } catch {}
         $s | ConvertTo-Json -Compress
         """
-        out = run_powershell(ps)
+        out = run_powershell(ps, computer_name=computer_name)
         try:
                 parsed = json.loads(out) if out else []
                 if isinstance(parsed, dict):
                         parsed = [parsed]
-                return parsed if parsed else [{"Fabricante":"","Modelo":"","Serial":"Nenhum serial encontrado"}]
+                return parsed if parsed else [{"Fabricante":"","Modelo":"","Serial":"NÃO OBTIDO"}]
         except Exception:
-                return [{"Fabricante":"","Modelo":"","Serial":"Nenhum serial encontrado"}]
+                return [{"Fabricante":"","Modelo":"","Serial":"NÃO OBTIDO"}]
 
-def get_devices_by_class(devclass):
+def get_devices_by_class(devclass, computer_name=None):
     ps = r"""
     $out = @()
     try {{
@@ -141,7 +405,7 @@ def get_devices_by_class(devclass):
     }} catch {{}}
     $out | ConvertTo-Json -Compress
     """
-    out = run_powershell(ps.format(cls=devclass))
+    out = run_powershell(ps.format(cls=devclass), computer_name=computer_name)
     items = []
     try:
         parsed = json.loads(out) if out else []
@@ -157,9 +421,658 @@ def get_devices_by_class(devclass):
         for l in out.splitlines():
             if l.strip():
                 items.append((l, "", "", ""))
-    return items or [("Nenhum dispositivo encontrado", "", "", "")]
+    return items or [("NÃO OBTIDO", "", "", "")]
 
-def get_printers():
+def get_sql_server_info(computer_name=None):
+    ps = r"""
+    $sqlInstances = @()
+    
+    # Buscar serviços do SQL Server
+    try {
+        $services = Get-WmiObject -Class Win32_Service -Filter "Name LIKE '%SQL%'" -ErrorAction SilentlyContinue
+        $sqlServices = $services | Where-Object { $_.Name -match "MSSQL\$" -or $_.Name -eq "MSSQLSERVER" }
+        
+        foreach ($service in $sqlServices) {
+            $instanceName = if ($service.Name -eq "MSSQLSERVER") { "Default" } else { $service.Name -replace "MSSQL\$", "" }
+            $status = $service.State
+            
+            # Tentar obter versão do registro
+            $version = ""
+            try {
+                if ($instanceName -eq "Default") {
+                    $regPath = "HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL*\MSSQLServer\CurrentVersion"
+                } else {
+                    $regPath = "HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL*\MSSQLServer\CurrentVersion"
+                }
+                
+                $versionKeys = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\" -ErrorAction SilentlyContinue | 
+                               Where-Object { $_.Name -match "MSSQL\d+\." }
+                
+                foreach ($key in $versionKeys) {
+                    $currentVersionPath = Join-Path $key.PSPath "MSSQLServer\CurrentVersion"
+                    if (Test-Path $currentVersionPath) {
+                        $versionReg = Get-ItemProperty $currentVersionPath -ErrorAction SilentlyContinue
+                        if ($versionReg.CurrentVersion) {
+                            $version = $versionReg.CurrentVersion
+                            break
+                        }
+                    }
+                }
+            } catch {}
+            
+            $sqlInstances += [PSCustomObject]@{
+                Instance = $instanceName
+                Status = $status
+                Version = $version
+            }
+        }
+    } catch {}
+    
+    # Se não encontrou serviços, tentar pelo registro
+    if ($sqlInstances.Count -eq 0) {
+        try {
+            $regKeys = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\" -ErrorAction SilentlyContinue | 
+                       Where-Object { $_.Name -match "MSSQL\d+\." }
+            
+            foreach ($key in $regKeys) {
+                $setupPath = Join-Path $key.PSPath "Setup"
+                if (Test-Path $setupPath) {
+                    $setup = Get-ItemProperty $setupPath -ErrorAction SilentlyContinue
+                    if ($setup.SqlProgramDir) {
+                        $sqlInstances += [PSCustomObject]@{
+                            Instance = $setup.Edition
+                            Status = "Unknown"
+                            Version = $setup.Version
+                        }
+                    }
+                }
+            }
+        } catch {}
+    }
+    
+    $sqlInstances | ConvertTo-Json -Compress
+    """
+    out = run_powershell(ps, computer_name=computer_name)
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        return parsed if parsed else []
+    except Exception:
+        return []
+
+def get_network_adapters_info(computer_name=None):
+    ps = r"""
+    $networkAdapters = @()
+    
+    try {
+        # Obter adaptadores de rede ativos
+        $adapters = Get-CimInstance Win32_NetworkAdapter -Filter "NetConnectionStatus=2" -ErrorAction SilentlyContinue
+        
+        foreach ($adapter in $adapters) {
+            $name = $adapter.Name
+            $manufacturer = $adapter.Manufacturer
+            $speed = "N/A"
+            $macAddress = $adapter.MACAddress
+            
+            # Tentar obter velocidade
+            if ($adapter.Speed) {
+                $speedMbps = [math]::Round($adapter.Speed / 1000000, 0)
+                $speed = "$speedMbps Mbps"
+            }
+            
+            # Verificar se é adaptador físico (não virtual)
+            if ($adapter.PhysicalAdapter -eq $true -or $name -notlike "*Virtual*" -and $name -notlike "*Loopback*" -and $macAddress) {
+                $networkAdapters += [PSCustomObject]@{
+                    Name = $name
+                    Manufacturer = $manufacturer
+                    Speed = $speed
+                    MACAddress = $macAddress
+                }
+            }
+        }
+        
+        # Se não encontrou pelo método acima, tentar método alternativo
+        if ($networkAdapters.Count -eq 0) {
+            $netAdapters = Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" }
+            foreach ($net in $netAdapters) {
+                $speed = if ($net.LinkSpeed) { 
+                    $speedValue = $net.LinkSpeed
+                    if ($speedValue -ge 1000000000) {
+                        [math]::Round($speedValue / 1000000000, 1).ToString() + " Gbps"
+                    } else {
+                        [math]::Round($speedValue / 1000000, 0).ToString() + " Mbps"
+                    }
+                } else { "N/A" }
+                
+                $networkAdapters += [PSCustomObject]@{
+                    Name = $net.Name
+                    Manufacturer = $net.DriverProvider
+                    Speed = $speed
+                    MACAddress = $net.MacAddress
+                }
+            }
+        }
+    } catch {}
+    
+    $networkAdapters | ConvertTo-Json -Compress
+    """
+    out = run_powershell(ps, computer_name=computer_name)
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        return parsed if parsed else []
+    except Exception:
+        return []
+
+def get_processor_info(computer_name=None):
+    ps = r"""
+    $processorInfo = @()
+    
+    try {
+        $processors = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue
+        
+        foreach ($cpu in $processors) {
+            $name = $cpu.Name
+            $manufacturer = $cpu.Manufacturer
+            $architecture = $cpu.Architecture
+            $cores = $cpu.NumberOfCores
+            $logicalProcessors = $cpu.NumberOfLogicalProcessors
+            $maxClockSpeed = $cpu.MaxClockSpeed
+            $currentClockSpeed = $cpu.CurrentClockSpeed
+            $l2CacheSize = $cpu.L2CacheSize
+            $l3CacheSize = $cpu.L3CacheSize
+            $socket = $cpu.SocketDesignation
+            
+            # Converter arquitetura para texto
+            $archText = switch ($architecture) {
+                0 { "x86" }
+                1 { "MIPS" }
+                2 { "Alpha" }
+                3 { "PowerPC" }
+                6 { "Intel Itanium" }
+                9 { "x64" }
+                default { "Desconhecida ($architecture)" }
+            }
+            
+            # Converter velocidades de MHz para GHz
+            $maxSpeed = if ($maxClockSpeed) { [math]::Round($maxClockSpeed / 1000, 2).ToString() + " GHz" } else { "N/A" }
+            $currentSpeed = if ($currentClockSpeed) { [math]::Round($currentClockSpeed / 1000, 2).ToString() + " GHz" } else { "N/A" }
+            
+            # Converter cache para KB/MB
+            $l2Cache = if ($l2CacheSize) { 
+                if ($l2CacheSize -ge 1024) { [math]::Round($l2CacheSize / 1024, 2).ToString() + " MB" }
+                else { $l2CacheSize.ToString() + " KB" }
+            } else { "N/A" }
+            
+            $l3Cache = if ($l3CacheSize) { 
+                if ($l3CacheSize -ge 1024) { [math]::Round($l3CacheSize / 1024, 2).ToString() + " MB" }
+                else { $l3CacheSize.ToString() + " KB" }
+            } else { "N/A" }
+            
+            $processorInfo += [PSCustomObject]@{
+                Name = $name
+                Manufacturer = $manufacturer
+                Architecture = $archText
+                Cores = $cores
+                LogicalProcessors = $logicalProcessors
+                MaxSpeed = $maxSpeed
+                CurrentSpeed = $currentSpeed
+                L2Cache = $l2Cache
+                L3Cache = $l3Cache
+                Socket = $socket
+            }
+        }
+    } catch {}
+    
+    $processorInfo | ConvertTo-Json -Compress
+    """
+    out = run_powershell(ps, computer_name=computer_name)
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        return parsed if parsed else []
+    except Exception:
+        return []
+
+def get_memory_modules_info(computer_name=None):
+    ps = r"""
+    $memoryModules = @()
+    
+    try {
+        $modules = Get-CimInstance Win32_PhysicalMemory -ErrorAction SilentlyContinue
+        
+        foreach ($module in $modules) {
+            $manufacturer = $module.Manufacturer
+            $partNumber = $module.PartNumber
+            $serialNumber = $module.SerialNumber
+            $capacity = $module.Capacity
+            $speed = $module.Speed
+            $memoryType = $module.MemoryType
+            $formFactor = $module.FormFactor
+            $deviceLocator = $module.DeviceLocator
+            $bankLabel = $module.BankLabel
+            
+            # Converter capacidade para GB
+            $capacityGB = if ($capacity) { [math]::Round($capacity / 1GB, 2).ToString() + " GB" } else { "N/A" }
+            
+            # Converter velocidade
+            $speedMHz = if ($speed) { $speed.ToString() + " MHz" } else { "N/A" }
+            
+            # Converter tipo de memória
+            $memTypeText = switch ($memoryType) {
+                20 { "DDR" }
+                21 { "DDR2" }
+                22 { "DDR2 FB-DIMM" }
+                24 { "DDR3" }
+                26 { "DDR4" }
+                34 { "DDR5" }
+                default { 
+                    # Tentar deduzir pelo speed (heurística) se $memoryType for 0, null ou desconhecido
+                    if ($speed -and $speed -ge 2133) { "DDR4" }
+                    elseif ($speed -and $speed -ge 1066) { "DDR3" } 
+                    elseif ($speed -and $speed -ge 533) { "DDR2" }
+                    elseif ($speed -and $speed -ge 200) { "DDR" }
+                    else { "Desconhecido" }
+                }
+            }
+            
+            # Converter fator de forma
+            $formFactorText = switch ($formFactor) {
+                8 { "DIMM" }
+                12 { "SO-DIMM" }
+                13 { "Micro-DIMM" }
+                default { "Form $formFactor" }
+            }
+            
+            $memoryModules += [PSCustomObject]@{
+                Manufacturer = if ($manufacturer) { $manufacturer.Trim() } else { "N/A" }
+                PartNumber = if ($partNumber) { $partNumber.Trim() } else { "N/A" }
+                SerialNumber = if ($serialNumber) { $serialNumber.Trim() } else { "N/A" }
+                Capacity = $capacityGB
+                Speed = $speedMHz
+                MemoryType = $memTypeText
+                FormFactor = $formFactorText
+                Location = if ($deviceLocator) { $deviceLocator } else { $bankLabel }
+            }
+        }
+    } catch {}
+    
+    $memoryModules | ConvertTo-Json -Compress
+    """
+    out = run_powershell(ps, computer_name=computer_name)
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        return parsed if parsed else []
+    except Exception:
+        return []
+
+def get_video_cards_info(computer_name=None):
+    ps = r"""
+    $videoCards = @()
+    
+    try {
+        $cards = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue
+        
+        foreach ($card in $cards) {
+            $name = $card.Name
+            $manufacturer = $card.AdapterCompatibility
+            $memory = "N/A"
+            $driver = $card.DriverVersion
+            $type = "Desconhecido"
+            
+            # Determinar memória de vídeo
+            if ($card.AdapterRAM -and $card.AdapterRAM -gt 0) {
+                $memoryGB = [math]::Round($card.AdapterRAM / 1GB, 2)
+                $memory = "$memoryGB GB"
+            }
+            
+            # Tentar determinar se é onboard ou offboard
+            if ($name -like "*Intel*" -and ($name -like "*HD Graphics*" -or $name -like "*UHD Graphics*" -or $name -like "*Iris*")) {
+                $type = "Onboard (Integrada)"
+            } elseif ($name -like "*AMD*" -and $name -like "*Radeon*" -and ($name -like "*Vega*" -or $name -like "*APU*")) {
+                $type = "Onboard (Integrada)"
+            } elseif ($name -like "*NVIDIA*" -or $name -like "*AMD Radeon RX*" -or $name -like "*GeForce*" -or $name -like "*Quadro*") {
+                $type = "Offboard (Dedicada)"
+            } elseif ($card.PNPDeviceID -like "*PCI\VEN_*") {
+                $type = "Offboard (Dedicada)"
+            } else {
+                $type = "Onboard (Integrada)"
+            }
+            
+            $videoCards += [PSCustomObject]@{
+                Name = $name
+                Manufacturer = $manufacturer
+                Memory = $memory
+                Driver = $driver
+                Type = $type
+            }
+        }
+    } catch {}
+    
+    $videoCards | ConvertTo-Json -Compress
+    """
+    out = run_powershell(ps, computer_name=computer_name)
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        return parsed if parsed else []
+    except Exception:
+        return []
+
+def get_logical_drives_info(computer_name=None):
+    ps = r"""
+    $drives = @()
+    
+    try {
+        $logicalDrives = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+        foreach ($drive in $logicalDrives) {
+            $deviceId = $drive.DeviceID
+            $size = if ($drive.Size) { [math]::Round($drive.Size / 1GB, 2) } else { 0 }
+            $freeSpace = if ($drive.FreeSpace) { [math]::Round($drive.FreeSpace / 1GB, 2) } else { 0 }
+            $usedSpace = $size - $freeSpace
+            $fileSystem = $drive.FileSystem
+            $volumeName = $drive.VolumeName
+            
+            $drives += [PSCustomObject]@{
+                Drive = $deviceId
+                Size = $size
+                Used = $usedSpace
+                Free = $freeSpace
+                FileSystem = $fileSystem
+                Label = if ($volumeName) { $volumeName } else { "Sem rótulo" }
+            }
+        }
+        
+        # Ordenar por letra da unidade
+        $sortedDrives = $drives | Sort-Object Drive
+        
+    } catch {
+        $sortedDrives = @()
+    }
+    
+    $sortedDrives | ConvertTo-Json -Compress
+    """
+    out = run_powershell(ps, computer_name=computer_name)
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        return parsed if parsed else []
+    except Exception:
+        return []
+
+def get_admin_users(computer_name=None):
+    ps = r"""
+    $adminUsers = @()
+    
+    try {
+        # Obter membros do grupo de administradores
+        $adminGroup = Get-LocalGroup -Name "Administradores" -ErrorAction SilentlyContinue
+        if (-not $adminGroup) {
+            $adminGroup = Get-LocalGroup -Name "Administrators" -ErrorAction SilentlyContinue
+        }
+        
+        if ($adminGroup) {
+            $members = Get-LocalGroupMember -Group $adminGroup -ErrorAction SilentlyContinue
+            foreach ($member in $members) {
+                $name = $member.Name
+                $objectClass = $member.ObjectClass
+                $principalSource = $member.PrincipalSource
+                
+                # Remover o nome do computador/domínio do nome do usuário
+                if ($name -like "*\*") {
+                    $name = ($name -split "\\")[-1]
+                }
+                
+                $adminUsers += $name
+            }
+        }
+        
+        # Ordenar por nome em ordem crescente e remover duplicatas
+        $sortedUsers = $adminUsers | Sort-Object | Get-Unique
+        
+    } catch {
+        # Método alternativo usando WMI se o método acima falhar
+        try {
+            $group = Get-WmiObject -Class Win32_Group -Filter "Name='Administrators' OR Name='Administradores'" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($group) {
+                $members = Get-WmiObject -Class Win32_GroupUser -ErrorAction SilentlyContinue | Where-Object { $_.GroupComponent -like "*$($group.Name)*" }
+                foreach ($member in $members) {
+                    $userPath = $member.PartComponent
+                    if ($userPath -match 'Name="([^"]+)"') {
+                        $userName = $matches[1]
+                        $sortedUsers += $userName
+                    }
+                }
+                $sortedUsers = $sortedUsers | Sort-Object | Get-Unique
+            }
+        } catch {
+            $sortedUsers = @()
+        }
+    }
+    
+    $sortedUsers | ConvertTo-Json -Compress
+    """
+    out = run_powershell(ps, computer_name=computer_name)
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, str):
+            return [parsed]  # Se retornou apenas um usuário como string
+        return parsed if parsed else []
+    except Exception:
+        return []
+
+def get_installed_software(computer_name=None):
+    ps = r"""
+    $softwareList = @()
+    
+    try {
+        $uninstallKeys = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+        )
+        
+        foreach ($key in $uninstallKeys) {
+            $programs = Get-ItemProperty $key -ErrorAction SilentlyContinue
+            foreach ($program in $programs) {
+                $displayName = $program.DisplayName
+                $version = $program.DisplayVersion
+                $publisher = $program.Publisher
+                
+                if ($displayName -and $displayName.Trim() -ne "") {
+                    # Filtrar alguns itens desnecessários
+                    if ($displayName -notlike "*Update*" -and 
+                        $displayName -notlike "*Hotfix*" -and
+                        $displayName -notlike "*Security Update*" -and
+                        $displayName -notlike "KB*" -and
+                        $displayName -ne "Microsoft Visual C++ 2019 X64 Additional Runtime" -and
+                        $displayName -notlike "*Redistributable*") {
+                        
+                        $softwareList += [PSCustomObject]@{
+                            Name = $displayName
+                            Version = if ($version) { $version } else { "N/A" }
+                            Publisher = if ($publisher) { $publisher } else { "N/A" }
+                        }
+                    }
+                }
+            }
+        }
+        
+        # Remover duplicatas e ordenar por nome
+        $uniqueSoftware = $softwareList | Group-Object Name | ForEach-Object { $_.Group | Select-Object -First 1 }
+        $sortedSoftware = $uniqueSoftware | Sort-Object Name
+        
+    } catch {
+        $sortedSoftware = @()
+    }
+    
+    $sortedSoftware | ConvertTo-Json -Compress
+    """
+    out = run_powershell(ps, computer_name=computer_name)
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        return parsed if parsed else []
+    except Exception:
+        return []
+
+def get_antivirus_info(computer_name=None):
+    ps = r"""
+    $antivirusList = @()
+    
+    # Método 1: Windows Security Center (funciona no Windows 10/11)
+    try {
+        $namespace = "root\SecurityCenter2"
+        $antivirusProducts = Get-WmiObject -Namespace $namespace -Class AntiVirusProduct -ErrorAction SilentlyContinue
+        
+        foreach ($av in $antivirusProducts) {
+            $name = $av.displayName
+            $state = $av.productState
+            
+            # Decodificar o estado do produto
+            $hex = [Convert]::ToString($state, 16).PadLeft(6, "0")
+            $s2 = $hex.Substring(2,2) 
+            
+            $enabled = "Desconhecido"
+            
+            # Verificar se está ativado (bit 4 e 5)
+            if ([Convert]::ToInt32($s2, 16) -band 0x10) {
+                $enabled = "Ativado"
+            } elseif ([Convert]::ToInt32($s2, 16) -band 0x00) {
+                $enabled = "Desativado"
+            }
+            
+            $antivirusList += [PSCustomObject]@{
+                Name = $name
+                Enabled = $enabled
+            }
+        }
+    } catch {}
+    
+    # Método 2: Verificar pelo registro (programas instalados)
+    if ($antivirusList.Count -eq 0) {
+        try {
+            $uninstallKeys = @(
+                "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+            )
+            
+            $antivirusNames = @(
+                "Avast", "AVG", "Kaspersky", "Norton", "McAfee", "Bitdefender", 
+                "ESET", "Trend Micro", "F-Secure", "Panda", "Sophos", "Malwarebytes",
+                "Windows Defender", "Microsoft Defender", "Symantec", "Avira",
+                "Quick Heal", "Comodo", "360 Total Security", "Baidu Antivirus"
+            )
+            
+            foreach ($key in $uninstallKeys) {
+                $programs = Get-ItemProperty $key -ErrorAction SilentlyContinue
+                foreach ($program in $programs) {
+                    $displayName = $program.DisplayName
+                    if ($displayName) {
+                        foreach ($avName in $antivirusNames) {
+                            if ($displayName -like "*$avName*") {
+                                $antivirusList += [PSCustomObject]@{
+                                    Name = $displayName
+                                    Enabled = "Instalado"
+                                }
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+        } catch {}
+    }
+    
+    # Método 3: Verificar Windows Defender especificamente
+    if ($antivirusList.Count -eq 0) {
+        try {
+            $defenderStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
+            if ($defenderStatus) {
+                $enabled = if ($defenderStatus.RealTimeProtectionEnabled) { "Ativado" } else { "Desativado" }
+                
+                $antivirusList += [PSCustomObject]@{
+                    Name = "Windows Defender"
+                    Enabled = $enabled
+                }
+            }
+        } catch {}
+    }
+    
+    # Se nada foi encontrado, verificar se há pelo menos o Windows Defender básico
+    if ($antivirusList.Count -eq 0) {
+        try {
+            $defenderService = Get-Service -Name "WinDefend" -ErrorAction SilentlyContinue
+            if ($defenderService) {
+                $status = if ($defenderService.Status -eq "Running") { "Em execução" } else { $defenderService.Status }
+                $antivirusList += [PSCustomObject]@{
+                    Name = "Windows Defender (Serviço)"
+                    Enabled = $status
+                }
+            }
+        } catch {}
+    }
+    
+    # Remover duplicatas baseado no nome
+    $uniqueList = @()
+    $seenNames = @()
+    foreach ($av in $antivirusList) {
+        $cleanName = $av.Name -replace '\s*\d+.*$', '' -replace '\s*\(.*\)', '' -replace '\s+', ' '
+        $cleanName = $cleanName.Trim()
+        
+        if ($seenNames -notcontains $cleanName) {
+            $seenNames += $cleanName
+            $uniqueList += [PSCustomObject]@{
+                Name = $cleanName
+                Enabled = $av.Enabled
+            }
+        }
+    }
+    
+    $uniqueList | ConvertTo-Json -Compress
+    """
+    out = run_powershell(ps, computer_name=computer_name)
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        return parsed if parsed else []
+    except Exception:
+        return []
+
+def get_keyboard_mouse_status(computer_name=None):
+    ps = r"""
+    $hasKeyboard = $false
+    $hasMouse = $false
+    
+    try {
+        $keyboards = Get-WmiObject -Class Win32_Keyboard -ErrorAction SilentlyContinue
+        if ($keyboards) { $hasKeyboard = $true }
+        
+        $mice = Get-WmiObject -Class Win32_PointingDevice -ErrorAction SilentlyContinue
+        if ($mice) { $hasMouse = $true }
+    } catch {}
+    
+    [PSCustomObject]@{
+        HasKeyboard = $hasKeyboard
+        HasMouse = $hasMouse
+    } | ConvertTo-Json -Compress
+    """
+    out = run_powershell(ps, computer_name=computer_name)
+    try:
+        parsed = json.loads(out) if out else {}
+        return parsed.get('HasKeyboard', False), parsed.get('HasMouse', False)
+    except Exception:
+        return False, False
+
+def get_printers(computer_name=None):
         ps = r"""
         $o = @()
         try {
@@ -182,7 +1095,7 @@ def get_printers():
         } catch {}
         $o | ConvertTo-Json -Compress
         """
-        out = run_powershell(ps)
+        out = run_powershell(ps, computer_name=computer_name)
         items = []
         try:
                 parsed = json.loads(out) if out else []
@@ -194,16 +1107,16 @@ def get_printers():
                 for l in out.splitlines():
                         if l.strip():
                                 items.append((l, "", "", ""))
-        return items or [("Nenhuma impressora encontrada", "", "", "")]
+        return items or [("NÃO OBTIDO", "", "", "")]
 
-def is_laptop():
+def is_laptop(computer_name=None):
     # 1) verificar Win32_Battery (se existir, provavelmente notebook)
-    out = run_powershell("Get-CimInstance Win32_Battery | ConvertTo-Json -Compress")
+    out = run_powershell("Get-CimInstance Win32_Battery | ConvertTo-Json -Compress", computer_name=computer_name)
     if out and out.strip() != "null":
         return True
     # 2) verificar ChassisTypes em Win32_SystemEnclosure (valores que indicam portátil: 8,9,10,14)
     cmd = "(Get-CimInstance Win32_SystemEnclosure | Select-Object -ExpandProperty ChassisTypes | ConvertTo-Json -Compress)"
-    out2 = run_powershell(cmd)
+    out2 = run_powershell(cmd, computer_name=computer_name)
     try:
         arr = json.loads(out2) if out2 else []
         if isinstance(arr, int):
@@ -215,21 +1128,72 @@ def is_laptop():
         pass
     return False
 
+def remove_duplicate_lines(lines):
+    """Remove linhas duplicadas consecutivas, mantendo apenas a primeira ocorrência"""
+    if not lines:
+        return lines
+    
+    filtered_lines = [lines[0]]  # Sempre manter a primeira linha
+    
+    for i in range(1, len(lines)):
+        current_line = lines[i].strip()
+        previous_line = lines[i-1].strip()
+        
+        # Não remover linhas em branco ou linhas com "==="
+        if not current_line or "===" in current_line:
+            filtered_lines.append(lines[i])
+            continue
+            
+        # Remover linha se for idêntica à anterior
+        if current_line != previous_line:
+            filtered_lines.append(lines[i])
+    
+    return filtered_lines
+
 def write_report(path, lines):
+    # Remove duplicidades antes de escrever
+    filtered_lines = remove_duplicate_lines(lines)
+    
     with open(path, 'w', encoding='utf-8-sig') as f:
-        f.write("\n".join(lines))
+        f.write("\n".join(filtered_lines))
 
 def main():
+    # Solicitar nome da máquina remota
+    print("=== Coletor de Informações de Máquina ===")
+    computer_input = input("Digite o nome da máquina remota ou pressione ENTER com o campo em branco para analisar a máquina local: ").strip()
+    
+    computer_name = None if not computer_input else computer_input
+    
+    if computer_name:
+        print(f"Coletando informações da máquina remota: {computer_name}")
+        print("Nota: Certifique-se de que você tem permissões administrativas na máquina remota")
+        print("e que o WinRM está habilitado na máquina de destino.\n")
+    else:
+        print("Coletando informações da máquina local\n")
+    
     etapas = [
         "Obtendo nome do computador",
         "Verificando tipo (Notebook/Desktop)",
         "Obtendo versão do sistema operacional",
+        "Verificando ativação do Windows",
+        "Verificando tipo de rede (Domínio/Workgroup)",
+        "Obtendo informações do processador",
+        "Obtendo quantidade de memória RAM",
+        "Obtendo informações dos pentes de memória",
+        "Obtendo informações dos discos rígidos",
+        "Obtendo informações das unidades lógicas",
         "Obtendo versão do Office",
+        "Verificando ativação do Office",
         "Obtendo informações da placa mãe",
         "Obtendo informações dos monitores",
-        "Obtendo informações dos teclados",
-        "Obtendo informações dos mouses",
+        "Obtendo informações das placas de rede",
+        "Obtendo informações das placas de vídeo",
+        "Verificando teclado e mouse",
+        "Obtendo informações do SQL Server",
+        "Obtendo informações do antivírus",
+        "Obtendo usuários administradores",
         "Obtendo informações das impressoras",
+        "Obtendo lista de softwares instalados",
         "Salvando relatório"
     ]
     total = len(etapas)
@@ -242,55 +1206,189 @@ def main():
         tempo = int(time.time()-inicio)
         print(f"\r{barra} | {etapas[atual-1]} | Tempo: {tempo}s", end='', flush=True)
 
-    machine = get_machine_name(); barra_progresso(1)
+    machine = get_machine_name(computer_name); barra_progresso(1)
     safe_name = safe_filename(machine)
     filename = f"info_maquina_{safe_name}.txt"
     path = os.path.join(os.getcwd(), filename)
 
     lines = []
     lines.append(f"Relatório gerado: {datetime.now().isoformat()}")
-    lines.append(f"Nome do computador: {machine}"); barra_progresso(2)
-    lines.append(f"Tipo: {'Notebook' if is_laptop() else 'Desktop'}"); barra_progresso(3)
-    lines.append(f"Versão do sistema operacional: {get_os_version()}"); barra_progresso(4)
-    lines.append(f"Versão do Office (se tiver): {get_office_version()}"); barra_progresso(5)
-    fabricante_mb, modelo_mb, serial_mb = get_motherboard_info()
     def padrao(valor):
         return valor if valor and str(valor).strip() else "NÃO OBTIDO"
-    lines.append(f"Placa mãe: {padrao(fabricante_mb)} | Modelo: {padrao(modelo_mb)} | Serial: {padrao(serial_mb)}"); barra_progresso(6)
+    
+    lines.append(f"Nome do computador: {machine}"); barra_progresso(2)
+    lines.append(f"Tipo: {'Notebook' if is_laptop(computer_name) else 'Desktop'}"); barra_progresso(3)
+    lines.append(f"Versão do sistema operacional: {get_os_version(computer_name)}"); barra_progresso(4)
+    lines.append(f"Ativação do Windows: {get_windows_activation_status(computer_name)}"); barra_progresso(5)
+    lines.append(f"Rede: {is_domain_computer(computer_name)}"); barra_progresso(6)
+    
+    # Informações do processador
+    processors = get_processor_info(computer_name)
+    if processors:
+        for idx, cpu in enumerate(processors, start=1):
+            name = padrao(cpu.get('Name', ''))
+            manufacturer = padrao(cpu.get('Manufacturer', ''))
+            cores = padrao(cpu.get('Cores', ''))
+            logical = padrao(cpu.get('LogicalProcessors', ''))
+            max_speed = padrao(cpu.get('MaxSpeed', ''))
+            arch = padrao(cpu.get('Architecture', ''))
+            l2_cache = padrao(cpu.get('L2Cache', ''))
+            l3_cache = padrao(cpu.get('L3Cache', ''))
+            lines.append(f"Processador {idx}: {name}")
+            lines.append(f"  Fabricante: {manufacturer} | Arquitetura: {arch}")
+            lines.append(f"  Cores físicos: {cores} | Cores lógicos: {logical} | Velocidade máxima: {max_speed}")
+            lines.append(f"  Cache L2: {l2_cache} | Cache L3: {l3_cache}")
+    else:
+        lines.append("Processador: NÃO OBTIDO")
+    barra_progresso(4)
+    
+    lines.append(f"Memória RAM total: {get_memory_info(computer_name)}"); barra_progresso(7)
+    
+    # Informações dos pentes de memória
+    memory_modules = get_memory_modules_info(computer_name)
+    if memory_modules:
+        for idx, module in enumerate(memory_modules, start=1):
+            manufacturer = padrao(module.get('Manufacturer', ''))
+            part_number = padrao(module.get('PartNumber', ''))
+            capacity = padrao(module.get('Capacity', ''))
+            speed = padrao(module.get('Speed', ''))
+            mem_type = padrao(module.get('MemoryType', ''))
+            form_factor = padrao(module.get('FormFactor', ''))
+            location = padrao(module.get('Location', ''))
+            lines.append(f"Pente de Memória {idx}: {capacity} | {mem_type} | {speed} | {form_factor}")
+            lines.append(f"  Fabricante: {manufacturer} | P/N: {part_number} | Localização: {location}")
+    else:
+        lines.append("Pentes de Memória: NÃO OBTIDO")
+    barra_progresso(8)
+    
+    # Discos rígidos
+    disks = get_disk_info(computer_name)
+    if disks:
+        for idx, (modelo, tamanho, espaco_usado, espaco_livre, particoes, tipo, interface) in enumerate(disks, start=1):
+            lines.append(f"Disco {idx}: {padrao(modelo)} | Tamanho: {padrao(tamanho)}")
+            lines.append(f"  Tipo: {padrao(tipo)} | Interface: {padrao(interface)}")
+    else:
+        lines.append("Disco: NÃO OBTIDO")
+    barra_progresso(9)
 
-    monitors = get_monitor_infos()
+    # Unidades lógicas (partições com espaço disponível)
+    logical_drives = get_logical_drives_info(computer_name)
+    if logical_drives:
+        for drive in logical_drives:
+            drive_letter = padrao(drive.get('Drive', ''))
+            size = padrao(drive.get('Size', ''))
+            used = padrao(drive.get('Used', ''))
+            free = padrao(drive.get('Free', ''))
+            file_system = padrao(drive.get('FileSystem', ''))
+            label = padrao(drive.get('Label', ''))
+            lines.append(f"Unidade {drive_letter} ({label}) | Total: {size} GB | Usado: {used} GB | Livre: {free} GB | Sistema: {file_system}")
+    else:
+        lines.append("Unidades lógicas: NÃO OBTIDO")
+    barra_progresso(10)
+    
+    lines.append(f"Versão do Office: {get_office_version(computer_name)}"); barra_progresso(11)
+    lines.append(f"Ativação do Office: {get_office_activation_status(computer_name)}"); barra_progresso(12)
+    fabricante_mb, modelo_mb, serial_mb = get_motherboard_info(computer_name)
+    lines.append(f"Placa mãe: {padrao(fabricante_mb)} | Modelo: {padrao(modelo_mb)} | Serial: {padrao(serial_mb)}"); barra_progresso(13)
+
+    monitors = get_monitor_infos(computer_name)
     if monitors:
         for idx, m in enumerate(monitors, start=1):
             lines.append(f"Monitor {idx}: {padrao(m.get('Fabricante',''))} | Modelo: {padrao(m.get('Modelo',''))} | Serial: {padrao(m.get('Serial',''))}")
     else:
         lines.append("Monitor 1: NÃO OBTIDO")
-    barra_progresso(7)
+    barra_progresso(14)
 
-    keyboards = get_devices_by_class("Keyboard")
-    if keyboards:
-        for idx, (name, serial, fabricante, modelo) in enumerate(keyboards, start=1):
-            lines.append(f"Teclado {idx}: {padrao(name)} | Serial/ID: {padrao(serial)} | Fabricante: {padrao(fabricante)} | Modelo: {padrao(modelo)}")
+    # Placas de rede
+    network_adapters = get_network_adapters_info(computer_name)
+    if network_adapters:
+        for idx, adapter in enumerate(network_adapters, start=1):
+            name = padrao(adapter.get('Name', ''))
+            manufacturer = padrao(adapter.get('Manufacturer', ''))
+            speed = padrao(adapter.get('Speed', ''))
+            mac = padrao(adapter.get('MACAddress', ''))
+            lines.append(f"Placa de Rede {idx}: {name} | Fabricante: {manufacturer} | Velocidade: {speed} | MAC: {mac}")
     else:
-        lines.append("Teclado: NÃO OBTIDO")
-    barra_progresso(8)
+        lines.append("Placa de Rede: NÃO OBTIDO")
+    barra_progresso(15)
 
-    mice = get_devices_by_class("Mouse")
-    if mice:
-        for idx, (name, serial, fabricante, modelo) in enumerate(mice, start=1):
-            lines.append(f"Mouse {idx}: {padrao(name)} | Serial/ID: {padrao(serial)} | Fabricante: {padrao(fabricante)} | Modelo: {padrao(modelo)}")
+    # Placas de vídeo
+    video_cards = get_video_cards_info(computer_name)
+    if video_cards:
+        for idx, card in enumerate(video_cards, start=1):
+            name = padrao(card.get('Name', ''))
+            manufacturer = padrao(card.get('Manufacturer', ''))
+            memory = padrao(card.get('Memory', ''))
+            card_type = padrao(card.get('Type', ''))
+            lines.append(f"Placa de Vídeo {idx}: {name} | Fabricante: {manufacturer} | Memória: {memory} | Tipo: {card_type}")
     else:
-        lines.append("Mouse: NÃO OBTIDO")
-    barra_progresso(9)
+        lines.append("Placa de Vídeo: NÃO OBTIDO")
+    barra_progresso(16)
 
-    printers = get_printers()
+    # Verificar presença de teclado e mouse
+    has_keyboard, has_mouse = get_keyboard_mouse_status(computer_name)
+    lines.append(f"Teclado conectado: {'SIM' if has_keyboard else 'NÃO'}")
+    lines.append(f"Mouse conectado: {'SIM' if has_mouse else 'NÃO'}")
+    barra_progresso(17)
+
+    # Informações do SQL Server
+    sql_instances = get_sql_server_info(computer_name)
+    if sql_instances:
+        for idx, instance in enumerate(sql_instances, start=1):
+            instance_name = padrao(instance.get('Instance', ''))
+            version = padrao(instance.get('Version', ''))
+            status = padrao(instance.get('Status', ''))
+            lines.append(f"SQL Server {idx}: Instância: {instance_name} | Versão: {version} | Status: {status}")
+    else:
+        lines.append("SQL Server: NÃO INSTALADO")
+    barra_progresso(18)
+
+    # Informações do Antivírus (sem informação de atualização)
+    antivirus_list = get_antivirus_info(computer_name)
+    if antivirus_list:
+        for idx, av in enumerate(antivirus_list, start=1):
+            name = padrao(av.get('Name', ''))
+            enabled = padrao(av.get('Enabled', ''))
+            lines.append(f"Antivírus {idx}: {name} | Status: {enabled}")
+    else:
+        lines.append("Antivírus: NÃO DETECTADO")
+    barra_progresso(19)
+
+    # Usuários administradores
+    admin_users = get_admin_users(computer_name)
+    if admin_users:
+        for idx, user in enumerate(admin_users, start=1):
+            # Como agora get_admin_users retorna apenas strings (nomes)
+            name = padrao(user if isinstance(user, str) else user.get('Name', ''))
+            lines.append(f"Administrador {idx}: {name}")
+    else:
+        lines.append("Usuários Administradores: NÃO OBTIDO")
+    barra_progresso(20)
+
+    printers = get_printers(computer_name)
     if printers:
         for idx, (name, serial, fabricante, modelo) in enumerate(printers, start=1):
             lines.append(f"Impressora {idx}: {padrao(name)} | Serial/ID: {padrao(serial)} | Fabricante: {padrao(fabricante)} | Modelo: {padrao(modelo)}")
     else:
         lines.append("Impressora: NÃO OBTIDO")
-    barra_progresso(10)
+    barra_progresso(21)
+
+    # Lista de softwares instalados (ordenados por nome)
+    lines.append("")  # Linha em branco para separar
+    lines.append("=== SOFTWARES INSTALADOS ===")
+    installed_software = get_installed_software(computer_name)
+    if installed_software:
+        for idx, software in enumerate(installed_software, start=1):
+            name = padrao(software.get('Name', ''))
+            version = padrao(software.get('Version', ''))
+            publisher = padrao(software.get('Publisher', ''))
+            lines.append(f"{idx:3d}. {name} | Versão: {version} | Editor: {publisher}")
+    else:
+        lines.append("Nenhum software detectado")
+    barra_progresso(22)
 
     write_report(path, lines)
+    barra_progresso(23)
     print(f"\nArquivo gerado: {path}")
     resposta = input(f"Deseja abrir o arquivo gerado ({filename})? [s/N]: ").strip().lower()
     if resposta == 's':
