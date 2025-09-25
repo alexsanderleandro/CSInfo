@@ -1282,14 +1282,80 @@ def organize_pdf_data(lines, computer_name):
 def write_pdf_report(path, lines, computer_name):
     """Gera um relatório em PDF com as informações coletadas - idêntico ao TXT"""
     try:
-        from reportlab.platypus import Table, TableStyle
+        from reportlab.platypus import Table, TableStyle, PageTemplate, Frame, Spacer, Paragraph
         from reportlab.lib.enums import TA_LEFT, TA_CENTER
+        from reportlab.platypus import BaseDocTemplate
+        from reportlab.lib.units import inch
+        from reportlab.platypus.doctemplate import PageBreak
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib import colors
+        from reportlab.pdfgen import canvas
+        from reportlab.platypus.flowables import HRFlowable
         
         # Remover duplicatas (igual ao TXT)
         filtered_lines = remove_duplicate_lines(lines)
         
-        # Criar documento PDF
-        doc = SimpleDocTemplate(path, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        # Criar classe personalizada para rodapé
+        class NumberedCanvas(canvas.Canvas):
+            def __init__(self, *args, **kwargs):
+                canvas.Canvas.__init__(self, *args, **kwargs)
+                self._saved_page_states = []
+                
+            def showPage(self):
+                self._saved_page_states.append(dict(self.__dict__))
+                self._startPage()
+                
+            def save(self):
+                """Adiciona informações de página em cada página"""
+                num_pages = len(self._saved_page_states)
+                for (page_num, state) in enumerate(self._saved_page_states):
+                    self.__dict__.update(state)
+                    self.draw_page_number(page_num + 1, num_pages)
+                    canvas.Canvas.showPage(self)
+                canvas.Canvas.save(self)
+                
+            def draw_page_number(self, page_num, total_pages):
+                """Desenha o rodapé com numeração de página e texto centralizado"""
+                # Desenhar linha fina cinza acima do rodapé
+                self.setStrokeColor(colors.Color(0.7, 0.7, 0.7))  # Cinza claro
+                self.setLineWidth(0.5)  # Linha fina
+                self.line(0.5*inch, 0.5*inch, A4[0] - 0.5*inch, 0.5*inch)  # Linha horizontal
+                
+                # Configurar fonte para rodapé - tamanho 7, cinza 75%
+                self.setFont("Helvetica", 7)
+                self.setFillColor(colors.Color(0.25, 0.25, 0.25))  # Cinza 75% (25% preto)
+                
+                # Numeração de páginas (lado esquerdo)
+                page_text = f"Página {page_num} de {total_pages}"
+                self.drawString(0.5*inch, 0.3*inch, page_text)
+                
+                # Texto "CSInfo by CEOsoftware" centralizado
+                footer_text = "CSInfo by CEOsoftware"
+                text_width = self.stringWidth(footer_text, "Helvetica", 7)
+                page_width = A4[0]  # Largura da página A4
+                x_center = (page_width - text_width) / 2
+                self.drawString(x_center, 0.3*inch, footer_text)
+        
+        # Criar documento PDF com template personalizado
+        doc = BaseDocTemplate(path, pagesize=A4)
+        
+        # Definir frame com margens ajustadas para o rodapé
+        frame = Frame(
+            0.5*inch,  # x1 (margem esquerda)
+            0.6*inch,  # y1 (margem inferior - espaço para rodapé)
+            A4[0] - inch,  # width (largura da página - margens)
+            A4[1] - 1.1*inch,  # height (altura - margens superior e inferior)
+            leftPadding=0,
+            bottomPadding=0,
+            rightPadding=0,
+            topPadding=0
+        )
+        
+        # Criar template da página
+        template = PageTemplate(id='normal', frames=[frame])
+        doc.addPageTemplates([template])
+        
         story = []
         
         # Estilos
@@ -1307,18 +1373,53 @@ def write_pdf_report(path, lines, computer_name):
             fontName='Helvetica-Bold'
         )
         
-        # Estilo para títulos de seção - cinza 85%
-        section_title_style = ParagraphStyle(
-            'SectionTitle',
-            parent=styles['Heading2'],
-            fontSize=10,
-            spaceAfter=6,
-            spaceBefore=6,
-            leading=12,
-            textColor=colors.Color(0.15, 0.15, 0.15),  # Cinza 85% (15% preto)
-            fontName='Helvetica-Bold',
-            alignment=TA_LEFT
-        )
+        # Estilos para títulos de seção personalizados
+        section_title_styles = {
+            "INFORMAÇÕES DO SISTEMA": ParagraphStyle(
+                'SectionTitleSistema',
+                parent=styles['Heading2'],
+                fontSize=10,
+                spaceAfter=6,
+                spaceBefore=6,
+                leading=12,
+                textColor=colors.Color(0.5, 0, 0),  # Vermelho escuro
+                fontName='Helvetica-Bold',
+                alignment=TA_LEFT
+            ),
+            "INFORMAÇÕES DE HARDWARE": ParagraphStyle(
+                'SectionTitleHardware',
+                parent=styles['Heading2'],
+                fontSize=10,
+                spaceAfter=6,
+                spaceBefore=6,
+                leading=12,
+                textColor=colors.Color(0, 0.35, 0),  # Verde escuro
+                fontName='Helvetica-Bold',
+                alignment=TA_LEFT
+            ),
+            "ADMINISTRADORES": ParagraphStyle(
+                'SectionTitleAdmin',
+                parent=styles['Heading2'],
+                fontSize=10,
+                spaceAfter=6,
+                spaceBefore=6,
+                leading=12,
+                textColor=colors.Color(1, 0.5, 0),  # Laranja
+                fontName='Helvetica-Bold',
+                alignment=TA_LEFT
+            ),
+            "SOFTWARES INSTALADOS": ParagraphStyle(
+                'SectionTitleSoft',
+                parent=styles['Heading2'],
+                fontSize=10,
+                spaceAfter=6,
+                spaceBefore=6,
+                leading=12,
+                textColor=colors.Color(0.7, 0.6, 0.1),  # Amarelo escuro
+                fontName='Helvetica-Bold',
+                alignment=TA_LEFT
+            ),
+        }
         
         # Estilo para texto normal
         normal_style = ParagraphStyle(
@@ -1375,17 +1476,17 @@ def write_pdf_report(path, lines, computer_name):
             # Cabeçalho principal
             if line_stripped == "CSInfo - Resumo Técnico do Dispositivo":
                 story.append(Paragraph(clean_text(line_stripped), header_style))
+                # Adicionar linha fina cinza abaixo do título
+                story.append(HRFlowable(width="100%", thickness=1, color=colors.Color(0.7, 0.7, 0.7), spaceBefore=3, spaceAfter=6))
                 continue
             
-            # Títulos de seções
-            if line_stripped in ["INFORMAÇÕES DO SISTEMA", "INFORMAÇÕES DE HARDWARE", "ADMINISTRADORES", "SOFTWARES INSTALADOS"]:
-                story.append(Paragraph(f"<b>{clean_text(line_stripped)}</b>", section_title_style))
+            # Títulos de seções com cor personalizada
+            if line_stripped in section_title_styles:
+                story.append(Paragraph(f"<b>{clean_text(line_stripped)}</b>", section_title_styles[line_stripped]))
                 continue
             
-            # Rodapé
+            # Pular o rodapé do conteúdo (será adicionado automaticamente)
             if line_stripped == "CSInfo by CEOsoftware":
-                story.append(Spacer(1, 12))
-                story.append(Paragraph(clean_text(line_stripped), normal_style))
                 continue
             
             # Determinar o estilo baseado na indentação
@@ -1396,8 +1497,8 @@ def write_pdf_report(path, lines, computer_name):
             else:  # Sem indentação
                 story.append(Paragraph(clean_text(line_stripped), normal_style))
         
-        # Gerar PDF
-        doc.build(story)
+        # Gerar PDF com canvas personalizado
+        doc.build(story, canvasmaker=NumberedCanvas)
         return True
         
     except Exception as e:
@@ -1677,14 +1778,22 @@ def main():
     lines.append("")
     lines.append("CSInfo by CEOsoftware")
 
-    write_report(path, lines)
-    barra_progresso(23)
-    print(f"\nArquivo TXT gerado: {path}")
-    
-    # Perguntar se deseja gerar PDF
-    resposta_pdf = input("Deseja gerar também um arquivo PDF? [s/N]: ").strip().lower()
+    print("\nEscolha o formato de relatório para gerar:")
+    print("1 - TXT")
+    print("2 - PDF")
+    print("3 - Ambos (TXT e PDF)")
+    escolha = input("Digite o número da opção desejada [1/2/3]: ").strip()
+
+    gerar_txt = escolha in ('1', '3')
+    gerar_pdf = escolha in ('2', '3')
     pdf_path = None
-    if resposta_pdf == 's':
+
+    if gerar_txt:
+        write_report(path, lines)
+        barra_progresso(23)
+        print(f"✅ Arquivo TXT gerado: {path}")
+
+    if gerar_pdf:
         pdf_path = path.replace('.txt', '.pdf')
         print("Gerando arquivo PDF...")
         if write_pdf_report(pdf_path, lines, machine):
@@ -1692,17 +1801,18 @@ def main():
         else:
             print("❌ Erro ao gerar arquivo PDF.")
             pdf_path = None
-    
-    resposta = input(f"Deseja abrir o arquivo gerado ({filename})? [s/N]: ").strip().lower()
-    if resposta == 's':
-        try:
-            os.startfile(path)
-        except Exception as e:
-            print(f"Não foi possível abrir o arquivo: {e}")
-    
-    # Se PDF foi gerado, perguntar se deseja abrir
-    if pdf_path and os.path.exists(pdf_path):
-        resposta_pdf_abrir = input(f"Deseja abrir o arquivo PDF? [s/N]: ").strip().lower()
+
+    # Perguntar se deseja abrir os arquivos gerados
+    if gerar_txt:
+        resposta = input(f"Deseja abrir o arquivo TXT gerado ({filename})? [s/N]: ").strip().lower()
+        if resposta == 's':
+            try:
+                os.startfile(path)
+            except Exception as e:
+                print(f"Não foi possível abrir o arquivo TXT: {e}")
+
+    if gerar_pdf and pdf_path and os.path.exists(pdf_path):
+        resposta_pdf_abrir = input(f"Deseja abrir o arquivo PDF gerado? [s/N]: ").strip().lower()
         if resposta_pdf_abrir == 's':
             try:
                 os.startfile(pdf_path)
