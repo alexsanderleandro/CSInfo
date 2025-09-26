@@ -1505,20 +1505,52 @@ def write_pdf_report(path, lines, computer_name):
         print(f"Erro ao gerar PDF: {e}")
         return False
 
-def main():
-    # Solicitar nome da máquina remota
-    print("=== Coletor de Informações de Máquina ===")
-    computer_input = input("Digite o nome da máquina remota ou pressione ENTER com o campo em branco para analisar a máquina local: ").strip()
-    
-    computer_name = None if not computer_input else computer_input
-    
-    if computer_name:
-        print(f"Coletando informações da máquina remota: {computer_name}")
-        print("Nota: Certifique-se de que você tem permissões administrativas na máquina remota")
-        print("e que o WinRM está habilitado na máquina de destino.\n")
+def check_remote_machine(computer_name):
+    if not computer_name:
+        return True
+    import subprocess
+    try:
+        # Testa conectividade básica via ping
+        ping = subprocess.run(["ping", "-n", "1", computer_name], capture_output=True, text=True, timeout=5)
+        if ping.returncode != 0:
+            return False
+        # Testa WinRM (porta 5985)
+        import socket
+        try:
+            sock = socket.create_connection((computer_name, 5985), timeout=3)
+            sock.close()
+        except Exception:
+            return False
+        return True
+    except Exception:
+        return False
+
+def main(export_type=None, barra_callback=None, computer_name=None):
+    modo_gui = export_type is not None or barra_callback is not None
+    # Se chamado pela GUI, não pedir input nem printar
+    if not modo_gui:
+        print("=== Coletor de Informações de Máquina ===")
+        computer_input = input("Digite o nome da máquina remota ou pressione ENTER com o campo em branco para analisar a máquina local: ").strip()
+        computer_name = None if not computer_input else computer_input
+        if computer_name:
+            print(f"Coletando informações da máquina remota: {computer_name}")
+            print("Nota: Certifique-se de que você tem permissões administrativas na máquina remota")
+            print("e que o WinRM está habilitado na máquina de destino.\n")
+        else:
+            print("Coletando informações da máquina local\n")
     else:
-        print("Coletando informações da máquina local\n")
-    
+        if modo_gui:
+            gerar_txt = export_type in ('txt', 'ambos')
+            gerar_pdf = export_type in ('pdf', 'ambos')
+        else:
+            print("\nEscolha o formato de relatório para gerar:")
+            print("1 - TXT")
+            print("2 - PDF")
+            print("3 - Ambos (TXT e PDF)")
+            escolha = input("Digite o número da opção desejada [1/2/3]: ").strip()
+            gerar_txt = escolha in ('1', '3')
+            gerar_pdf = escolha in ('2', '3')
+
     etapas = [
         "Obtendo nome do computador",
         "Verificando tipo (Notebook/Desktop)",
@@ -1552,7 +1584,17 @@ def main():
         preenchido = int(largura*atual/total)
         barra = '[' + '#' * preenchido + '-' * (largura-preenchido) + f'] {perc}%'
         tempo = int(time.time()-inicio)
-        print(f"\r{barra} | {etapas[atual-1]} | Tempo: {tempo}s", end='', flush=True)
+        etapa_texto = etapas[atual-1] if atual-1 < len(etapas) else "Finalizado"
+        if hasattr(barra_progresso, "callback") and callable(barra_progresso.callback):
+            barra_progresso.callback(perc, etapa_texto)
+        elif not modo_gui:
+            print(f"\r{barra} | {etapa_texto} | Tempo: {tempo}s", end='', flush=True)
+
+    # Adiciona callback para cada linha apurada
+    def add_line(line):
+        lines.append(line)
+        if barra_callback:
+            barra_callback(None, line)
 
     machine = get_machine_name(computer_name); barra_progresso(1)
     safe_name = safe_filename(machine)
@@ -1564,26 +1606,26 @@ def main():
         return valor if valor and str(valor).strip() else "NÃO OBTIDO"
     
     # CABEÇALHO
-    lines.append("CSInfo - Resumo Técnico do Dispositivo")
-    lines.append("")
+    add_line("CSInfo - Resumo Técnico do Dispositivo")
+    add_line("")
     
     # NOME DA MÁQUINA E TIPO
-    lines.append(f"Nome do computador: {machine}"); barra_progresso(2)
-    lines.append(f"Tipo: {'Notebook' if is_laptop(computer_name) else 'Desktop'}"); barra_progresso(3)
-    lines.append("")
+    add_line(f"Nome do computador: {machine}"); barra_progresso(2)
+    add_line(f"Tipo: {'Notebook' if is_laptop(computer_name) else 'Desktop'}"); barra_progresso(3)
+    add_line("")
     
     # DATA DE GERAÇÃO
-    lines.append(f"Relatório gerado em: {datetime.now().strftime('%d/%m/%Y - %H:%M')}")
-    lines.append("")
+    add_line(f"Relatório gerado em: {datetime.now().strftime('%d/%m/%Y - %H:%M')}")
+    add_line("")
     
     # INFORMAÇÕES DO SISTEMA
-    lines.append("INFORMAÇÕES DO SISTEMA")
-    lines.append(f"Versão do sistema operacional: {get_os_version(computer_name)}"); barra_progresso(4)
-    lines.append(f"  Status do sistema operacional: {get_windows_activation_status(computer_name)}"); barra_progresso(5)
-    lines.append("")  # Linha em branco após Windows
-    lines.append(f"Versão do Office: {get_office_version(computer_name)}"); barra_progresso(6)
-    lines.append(f"  Status do Office: {get_office_activation_status(computer_name)}"); barra_progresso(7)
-    lines.append("")  # Linha em branco após Office
+    add_line("INFORMAÇÕES DO SISTEMA")
+    add_line(f"Versão do sistema operacional: {get_os_version(computer_name)}"); barra_progresso(4)
+    add_line(f"  Status do sistema operacional: {get_windows_activation_status(computer_name)}"); barra_progresso(5)
+    add_line("")  # Linha em branco após Windows
+    add_line(f"Versão do Office: {get_office_version(computer_name)}"); barra_progresso(6)
+    add_line(f"  Status do Office: {get_office_activation_status(computer_name)}"); barra_progresso(7)
+    add_line("")  # Linha em branco após Office
     
     # SQL Server
     sql_instances = get_sql_server_info(computer_name)
@@ -1592,10 +1634,10 @@ def main():
             instance_name = padrao(instance.get('Instance', ''))
             version = padrao(instance.get('Version', ''))
             status = padrao(instance.get('Status', ''))
-            lines.append(f"SQL Server {idx}: Instância: {instance_name} | Versão: {version} | Status: {status}")
+            add_line(f"SQL Server {idx}: Instância: {instance_name} | Versão: {version} | Status: {status}")
     else:
-        lines.append("SQL Server: NÃO INSTALADO")
-    lines.append("")  # Linha em branco após SQL Server
+        add_line("SQL Server: NÃO INSTALADO")
+    add_line("")  # Linha em branco após SQL Server
     barra_progresso(8)
 
     # Antivírus
@@ -1604,20 +1646,20 @@ def main():
         for idx, av in enumerate(antivirus_list, start=1):
             name = padrao(av.get('Name', ''))
             enabled = padrao(av.get('Enabled', ''))
-            lines.append(f"Antivírus {idx}: {name} | Status: {enabled}")
+            add_line(f"Antivírus {idx}: {name} | Status: {enabled}")
     else:
-        lines.append("Antivírus: NÃO DETECTADO")
-    lines.append("")  # Linha em branco após Antivírus
+        add_line("Antivírus: NÃO DETECTADO")
+    add_line("")  # Linha em branco após Antivírus
     barra_progresso(9)
     
-    lines.append(f"Rede: {is_domain_computer(computer_name)}"); barra_progresso(10)
-    lines.append("")
+    add_line(f"Rede: {is_domain_computer(computer_name)}"); barra_progresso(10)
+    add_line("")
     
     # INFORMAÇÕES DE HARDWARE
-    lines.append("INFORMAÇÕES DE HARDWARE")
+    add_line("INFORMAÇÕES DE HARDWARE")
     
     # MEMÓRIA RAM
-    lines.append(f"Memória RAM total: {get_memory_info(computer_name)}"); barra_progresso(11)
+    add_line(f"Memória RAM total: {get_memory_info(computer_name)}"); barra_progresso(11)
     
     # Pentes de memória
     memory_modules = get_memory_modules_info(computer_name)
@@ -1630,11 +1672,11 @@ def main():
             mem_type = padrao(module.get('MemoryType', ''))
             form_factor = padrao(module.get('FormFactor', ''))
             location = padrao(module.get('Location', ''))
-            lines.append(f"  Pente de Memória {idx}: {capacity} | {mem_type} | {speed} | {form_factor}")
-            lines.append(f"    Fabricante: {manufacturer}")
+            add_line(f"  Pente de Memória {idx}: {capacity} | {mem_type} | {speed} | {form_factor}")
+            add_line(f"    Fabricante: {manufacturer}")
     else:
-        lines.append("  Pentes de Memória: NÃO OBTIDO")
-    lines.append("")  # Linha em branco após Memória
+        add_line("  Pentes de Memória: NÃO OBTIDO")
+    add_line("")  # Linha em branco após Memória
     barra_progresso(12)
     
     # PROCESSADOR
@@ -1649,23 +1691,23 @@ def main():
             arch = padrao(cpu.get('Architecture', ''))
             l2_cache = padrao(cpu.get('L2Cache', ''))
             l3_cache = padrao(cpu.get('L3Cache', ''))
-            lines.append(f"Processador {idx}: {name}")
-            lines.append(f"  Cores: {cores} físicos | {logical} lógicos")
-            lines.append(f"  Cache: L2: {l2_cache} | L3: {l3_cache}")
-            lines.append(f"  Fabricante: {manufacturer}")
+            add_line(f"Processador {idx}: {name}")
+            add_line(f"  Cores: {cores} físicos | {logical} lógicos")
+            add_line(f"  Cache: L2: {l2_cache} | L3: {l3_cache}")
+            add_line(f"  Fabricante: {manufacturer}")
     else:
-        lines.append("Processador: NÃO OBTIDO")
-    lines.append("")  # Linha em branco após Processador
+        add_line("Processador: NÃO OBTIDO")
+    add_line("")  # Linha em branco após Processador
     barra_progresso(13)
     
     # DISCOS
     disks = get_disk_info(computer_name)
     if disks:
         for idx, (modelo, tamanho, espaco_usado, espaco_livre, particoes, tipo, interface) in enumerate(disks, start=1):
-            lines.append(f"Disco {idx}: {padrao(modelo)} | Tamanho: {padrao(tamanho)}")
-            lines.append(f"  Tipo: {padrao(tipo)} | Interface: {padrao(interface)}")
+            add_line(f"Disco {idx}: {padrao(modelo)} | Tamanho: {padrao(tamanho)}")
+            add_line(f"  Tipo: {padrao(tipo)} | Interface: {padrao(interface)}")
     else:
-        lines.append("Disco: NÃO OBTIDO")
+        add_line("Disco: NÃO OBTIDO")
     barra_progresso(14)
 
     # Unidades (após todos os discos)
@@ -1729,7 +1771,9 @@ def main():
         for idx, card in enumerate(video_cards, start=1):
             name = padrao(card.get('Name', ''))
             manufacturer = padrao(card.get('Manufacturer', ''))
+           
             memory = padrao(card.get('Memory', ''))
+
             card_type = padrao(card.get('Type', ''))
             lines.append(f"Placa de Vídeo {idx}: {name} | Fabricante: {manufacturer} | Memória: {memory} | Tipo: {card_type}")
     else:
@@ -1778,16 +1822,6 @@ def main():
     lines.append("")
     lines.append("CSInfo by CEOsoftware")
 
-    print("\nEscolha o formato de relatório para gerar:")
-    print("1 - TXT")
-    print("2 - PDF")
-    print("3 - Ambos (TXT e PDF)")
-    escolha = input("Digite o número da opção desejada [1/2/3]: ").strip()
-
-    gerar_txt = escolha in ('1', '3')
-    gerar_pdf = escolha in ('2', '3')
-    pdf_path = None
-
     if gerar_txt:
         write_report(path, lines)
         barra_progresso(23)
@@ -1803,21 +1837,33 @@ def main():
             pdf_path = None
 
     # Perguntar se deseja abrir os arquivos gerados
-    if gerar_txt:
-        resposta = input(f"Deseja abrir o arquivo TXT gerado ({filename})? [s/N]: ").strip().lower()
-        if resposta == 's':
-            try:
-                os.startfile(path)
-            except Exception as e:
-                print(f"Não foi possível abrir o arquivo TXT: {e}")
+    if not modo_gui:
+        if gerar_txt:
+            resposta = input(f"Deseja abrir o arquivo TXT gerado ({filename})? [s/N]: ").strip().lower()
+            if resposta == 's':
+                try:
+                    os.startfile(path)
+                except Exception as e:
+                    print(f"Não foi possível abrir o arquivo TXT: {e}")
 
-    if gerar_pdf and pdf_path and os.path.exists(pdf_path):
-        resposta_pdf_abrir = input(f"Deseja abrir o arquivo PDF gerado? [s/N]: ").strip().lower()
-        if resposta_pdf_abrir == 's':
-            try:
-                os.startfile(pdf_path)
-            except Exception as e:
-                print(f"Não foi possível abrir o arquivo PDF: {e}")
+        if gerar_pdf and pdf_path and os.path.exists(pdf_path):
+            resposta_pdf_abrir = input(f"Deseja abrir o arquivo PDF gerado? [s/N]: ").strip().lower()
+            if resposta_pdf_abrir == 's':
+                try:
+                    os.startfile(pdf_path)
+                except Exception as e:
+                    print(f"Não foi possível abrir o arquivo PDF: {e}")
+
+    # GUI: não perguntar, apenas retornar caminhos dos arquivos gerados
+    if modo_gui:
+        resultado = {
+            'txt': path if gerar_txt else None,
+            'pdf': pdf_path if gerar_pdf and pdf_path else None
+        }
+        return resultado
+
+def main_cli():
+    main()
 
 if __name__ == "__main__":
-    main()
+    main_cli()
