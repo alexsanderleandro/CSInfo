@@ -1345,15 +1345,32 @@ def write_pdf_report(path, lines, computer_name):
             0.5*inch,  # x1 (margem esquerda)
             0.6*inch,  # y1 (margem inferior - espaço para rodapé)
             A4[0] - inch,  # width (largura da página - margens)
-            A4[1] - 1.1*inch,  # height (altura - margens superior e inferior)
+            A4[1] - 1.35*inch,  # altura - ajuste intermediário para o topo
             leftPadding=0,
             bottomPadding=0,
             rightPadding=0,
-            topPadding=0
+            topPadding=0.15*inch  # padding superior levemente maior
         )
         
-        # Criar template da página
-        template = PageTemplate(id='normal', frames=[frame])
+        # Função para desenhar cabeçalho em cada página
+        def draw_header(canvas, doc):
+            canvas.saveState()
+            # Ajusta a posição do cabeçalho para não sobrepor o conteúdo
+            y_title = A4[1]-0.7*inch if doc.page == 1 else A4[1]-0.6*inch
+            y_subtitle = A4[1]-0.9*inch if doc.page == 1 else A4[1]-0.8*inch
+            y_line = A4[1]-0.95*inch if doc.page == 1 else A4[1]-0.85*inch
+            canvas.setFont("Helvetica-Bold", 14)
+            canvas.setFillColor(colors.navy)
+            canvas.drawCentredString(A4[0]/2, y_title, "CSInfo – Inventário de Hardware e Software")
+            canvas.setFont("Helvetica", 10)
+            canvas.setFillColor(colors.black)
+            canvas.drawCentredString(A4[0]/2, y_subtitle, "Análise dos ativos de hardware e software do computador")
+            canvas.setStrokeColor(colors.Color(0.7, 0.7, 0.7))
+            canvas.setLineWidth(0.5)
+            canvas.line(0.5*inch, y_line, A4[0]-0.5*inch, y_line)
+            canvas.restoreState()
+        # Criar template da página com cabeçalho
+        template = PageTemplate(id='normal', frames=[frame], onPage=draw_header)
         doc.addPageTemplates([template])
         
         story = []
@@ -1465,21 +1482,17 @@ def write_pdf_report(path, lines, computer_name):
                        .replace("'", '&#39;'))
         
         # Processar cada linha exatamente como no TXT
-        for line in filtered_lines:
+        for idx, line in enumerate(filtered_lines):
             line_stripped = line.strip()
-            
             # Linha em branco
             if not line_stripped:
                 story.append(Spacer(1, 6))
                 continue
-            
-            # Cabeçalho principal
-            if line_stripped == "CSInfo - Resumo Técnico do Dispositivo":
-                story.append(Paragraph(clean_text(line_stripped), header_style))
-                # Adicionar linha fina cinza abaixo do título
-                story.append(HRFlowable(width="100%", thickness=1, color=colors.Color(0.7, 0.7, 0.7), spaceBefore=3, spaceAfter=6))
+            # Remover cabeçalho duplicado nas páginas seguintes
+            if idx == 0 and line_stripped == "CSInfo – Inventário de Hardware e Software":
                 continue
-            
+            if idx == 1 and line_stripped == "Análise dos ativos de hardware e software do computador":
+                continue
             # Títulos de seções com cor personalizada
             if line_stripped in section_title_styles:
                 story.append(Paragraph(f"<b>{clean_text(line_stripped)}</b>", section_title_styles[line_stripped]))
@@ -1605,8 +1618,9 @@ def main(export_type=None, barra_callback=None, computer_name=None):
     def padrao(valor):
         return valor if valor and str(valor).strip() else "NÃO OBTIDO"
     
-    # CABEÇALHO
-    add_line("CSInfo - Resumo Técnico do Dispositivo")
+    # CABEÇALHO NOVO
+    add_line("CSInfo – Inventário de Hardware e Software")
+    add_line("Análise dos ativos de hardware e software do computador")
     add_line("")
     
     # NOME DA MÁQUINA E TIPO

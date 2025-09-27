@@ -1,9 +1,10 @@
-﻿CSInfo - Resumo Técnico do Dispositivo
+﻿CSInfo – Inventário de Hardware e Software
+Análise dos ativos de hardware e software do computador
 
 Nome do computador: CEOSOFT-059
 Tipo: Desktop
 
-Relatório gerado em: 27/09/2025 - 16:43
+Relatório gerado em: 27/09/2025 - 17:32
 
 INFORMAÇÕES DO SISTEMA
 Versão do sistema operacional: Microsoft Windows 11 Pro (Version 10.0.26100) - 64 bits
@@ -33,9 +34,9 @@ Disco 1: ST1000DM010-2EP102 | Tamanho: 931.51 GB
   Tipo: HDD | Interface: IDE
 Disco 2: KINGSTON SA400S37960G | Tamanho: 894.25 GB
   Tipo: HDD | Interface: IDE
-Unidade C: (Sem rótulo) | Total: 893.51 GB | Usado: 568.75 GB | Livre: 324.76 GB | Sistema: NTFS
+Unidade C: (Sem rótulo) | Total: 893.51 GB | Usado: 562.64 GB | Livre: 330.87 GB | Sistema: NTFS
 Unidade D: (Sem rótulo) | Total: 465.37 GB | Usado: 318.08000000000004 GB | Livre: 147.29 GB | Sistema: NTFS
-Unidade E: (Partição 2) | Total: 435.29 GB | Usado: 115.17000000000002 GB | Livre: 320.12 GB | Sistema: NTFS
+Unidade E: (Partição 2) | Total: 435.29 GB | Usado: 116.43 GB | Livre: 318.86 GB | Sistema: NTFS
 Unidade F: (Swapping) | Total: 29.3 GB | Usado: 1.7600000000000016 GB | Livre: 27.54 GB | Sistema: NTFS
 
 Monitor 1: NÃO OBTIDO | Modelo: NÃO OBTIDO | Serial: NÃO OBTIDO
