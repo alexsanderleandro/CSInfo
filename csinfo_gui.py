@@ -7,13 +7,13 @@ from csinfo import main as csinfo_main
 class CSInfoApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("CSInfo - Coletor de Informações")
+        self.title("CSInfo - Inventário de Hardware e Software")
         self.geometry("900x550")
         self.resizable(False, False)
         self.create_widgets()
 
     def create_widgets(self):
-        self.label = tk.Label(self, text="CSInfo by CEOsoftware", font=("Helvetica", 14, "bold"))
+        self.label = tk.Label(self, text="CSInfo - Análise dos ativos de hardware e software do computador - by CEOsoftware", font=("Helvetica", 10, "bold"), fg="#003366")
         self.label.pack(pady=10)
 
         self.export_var = tk.StringVar(value="txt")
@@ -34,7 +34,7 @@ class CSInfoApp(tk.Tk):
         self.machine_var.trace_add('write', to_uppercase)
         machine_frame = tk.Frame(self)
         machine_frame.pack(pady=5)
-        tk.Label(machine_frame, text="Nome da máquina:").pack(side=tk.LEFT)
+        tk.Label(machine_frame, text="Nome da máquina (em branco para a local):").pack(side=tk.LEFT)
         self.machine_entry = tk.Entry(machine_frame, textvariable=self.machine_var, width=25)
         self.machine_entry.pack(side=tk.LEFT)
 
@@ -94,7 +94,7 @@ class CSInfoApp(tk.Tk):
                     self.progress_label.config(text=etapa_texto)
                     self.progress_label.update_idletasks()
             resultado = csinfo_main(export_type=self.export_var.get(), barra_callback=gui_callback, computer_name=machine_name)
-            self.progress_label.config(text="Processo finalizado!")
+            self.progress_label.config(text="Análise finalizada!", fg="red", font=("Helvetica", 10, "bold"))
             # Ao final, mostra apenas o relatório completo
             txt_path = resultado.get('txt')
             if txt_path and os.path.exists(txt_path):
