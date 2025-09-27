@@ -8,7 +8,7 @@ class CSInfoApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("CSInfo - Inventário de Hardware e Software")
-        self.geometry("900x550")
+        self.geometry("900x600")
         self.resizable(False, False)
         self.create_widgets()
 
@@ -16,16 +16,7 @@ class CSInfoApp(tk.Tk):
         self.label = tk.Label(self, text="CSInfo - Análise dos ativos de hardware e software do computador - by CEOsoftware", font=("Helvetica", 10, "bold"), fg="#003366")
         self.label.pack(pady=10)
 
-        self.export_var = tk.StringVar(value="txt")
-        frame = tk.Frame(self)
-        frame.pack(pady=10)
-        tk.Label(frame, text="Tipo de exportação:").pack(side=tk.LEFT)
-        self.radio_txt = ttk.Radiobutton(frame, text="TXT", variable=self.export_var, value="txt")
-        self.radio_txt.pack(side=tk.LEFT)
-        self.radio_pdf = ttk.Radiobutton(frame, text="PDF", variable=self.export_var, value="pdf")
-        self.radio_pdf.pack(side=tk.LEFT)
-        self.radio_ambos = ttk.Radiobutton(frame, text="Ambos", variable=self.export_var, value="ambos")
-        self.radio_ambos.pack(side=tk.LEFT)
+    # ...existing code...
 
         self.machine_var = tk.StringVar()
         def to_uppercase(*args):
@@ -48,10 +39,20 @@ class CSInfoApp(tk.Tk):
         self.info_text.pack(pady=5)
         self.info_text.config(state=tk.DISABLED)
 
+        # Opções de exportação no final do form
+        export_frame = tk.Frame(self)
+        export_frame.pack(pady=10)
+        tk.Label(export_frame, text="Tipo de exportação:").pack(side=tk.LEFT)
+        self.export_var = tk.StringVar(value="txt")
+        self.radio_txt = ttk.Radiobutton(export_frame, text="TXT", variable=self.export_var, value="txt", state=tk.DISABLED)
+        self.radio_txt.pack(side=tk.LEFT)
+        self.radio_pdf = ttk.Radiobutton(export_frame, text="PDF", variable=self.export_var, value="pdf", state=tk.DISABLED)
+        self.radio_pdf.pack(side=tk.LEFT)
+        self.radio_ambos = ttk.Radiobutton(export_frame, text="Ambos", variable=self.export_var, value="ambos", state=tk.DISABLED)
+        self.radio_ambos.pack(side=tk.LEFT)
         self.export_btn = tk.Button(self, text="Exportar", command=self.exportar, width=15)
         self.export_btn.pack(pady=10)
         self.export_btn.config(state=tk.DISABLED)
-
         self.exit_btn = tk.Button(self, text="Sair", command=self.quit, width=15)
         self.exit_btn.pack(pady=10)
 
@@ -80,9 +81,9 @@ class CSInfoApp(tk.Tk):
                 self.progress_label.config(text=f"Não foi possível acessar a máquina '{machine_name}'. Ela pode estar desligada, fora da rede ou sem WinRM ativado.")
                 self.start_btn.config(state=tk.NORMAL)
                 self.machine_entry.config(state=tk.NORMAL)
-                self.radio_txt.config(state=tk.NORMAL)
-                self.radio_pdf.config(state=tk.NORMAL)
-                self.radio_ambos.config(state=tk.NORMAL)
+                self.radio_txt.config(state=tk.DISABLED)
+                self.radio_pdf.config(state=tk.DISABLED)
+                self.radio_ambos.config(state=tk.DISABLED)
                 self.export_btn.config(state=tk.DISABLED)
                 self.exit_btn.config(state=tk.NORMAL)
                 return
@@ -111,6 +112,9 @@ class CSInfoApp(tk.Tk):
                 self.info_text.insert(tk.END, "Relatório não encontrado.")
                 self.info_text.config(state=tk.DISABLED)
             self.export_btn.config(state=tk.NORMAL)
+            self.radio_txt.config(state=tk.NORMAL)
+            self.radio_pdf.config(state=tk.NORMAL)
+            self.radio_ambos.config(state=tk.NORMAL)
         except Exception as e:
             messagebox.showerror("Erro", str(e))
             self.export_btn.config(state=tk.DISABLED)
