@@ -50,6 +50,7 @@ class CSInfoApp(tk.Tk):
         self.radio_pdf.pack(side=tk.LEFT)
         self.radio_ambos = ttk.Radiobutton(export_frame, text="Ambos", variable=self.export_var, value="ambos", state=tk.DISABLED)
         self.radio_ambos.pack(side=tk.LEFT)
+    # Barra de progresso removida
         self.export_btn = tk.Button(self, text="Exportar", command=self.exportar, width=15)
         self.export_btn.pack(pady=10)
         self.export_btn.config(state=tk.DISABLED)
@@ -64,7 +65,7 @@ class CSInfoApp(tk.Tk):
         self.radio_ambos.config(state=tk.DISABLED)
         self.export_btn.config(state=tk.DISABLED)
         self.exit_btn.config(state=tk.DISABLED)
-        self.progress_label.config(text="")
+        self.progress_label.config(text="", fg="black")
         self.info_text.config(state=tk.NORMAL)
         self.info_text.delete(1.0, tk.END)
         self.info_text.config(state=tk.DISABLED)
@@ -72,9 +73,12 @@ class CSInfoApp(tk.Tk):
 
     def run_csinfo(self):
         try:
+            import platform
             machine_name = self.machine_var.get().strip() or None
+            if machine_name and machine_name.upper() == platform.node().upper():
+                machine_name = None
             if machine_name:
-                self.progress_label.config(text=f"Acessando a máquina {machine_name}...")
+                self.progress_label.config(text=f"Acessando a máquina {machine_name}...", fg="black", font=("Helvetica", 10, "bold"))
                 self.update_idletasks()
             from csinfo import check_remote_machine
             if machine_name and not check_remote_machine(machine_name):
@@ -92,7 +96,7 @@ class CSInfoApp(tk.Tk):
             self.info_text.delete(1.0, tk.END)
             def gui_callback(_, etapa_texto=None):
                 if etapa_texto:
-                    self.progress_label.config(text=etapa_texto)
+                    self.progress_label.config(text=etapa_texto, font=("Helvetica", 10, "bold"))
                     self.progress_label.update_idletasks()
             resultado = csinfo_main(export_type=self.export_var.get(), barra_callback=gui_callback, computer_name=machine_name)
             self.progress_label.config(text="Análise finalizada!", fg="red", font=("Helvetica", 10, "bold"))
@@ -134,6 +138,16 @@ class CSInfoApp(tk.Tk):
         self.after(0, atualizar)
 
     def exportar(self):
+        # Desabilita todos os campos do formulário
+        self.start_btn.config(state=tk.DISABLED)
+        self.machine_entry.config(state=tk.DISABLED)
+        self.radio_txt.config(state=tk.DISABLED)
+        self.radio_pdf.config(state=tk.DISABLED)
+        self.radio_ambos.config(state=tk.DISABLED)
+        self.export_btn.config(state=tk.DISABLED)
+        self.exit_btn.config(state=tk.DISABLED)
+        self.progress_label.config(text="Exportando relatório, aguarde...", font=("Helvetica", 10, "bold"))
+        self.update_idletasks()
         try:
             machine_name = self.machine_var.get().strip() or None
             tipo = self.export_var.get()
@@ -159,6 +173,16 @@ class CSInfoApp(tk.Tk):
                         messagebox.showerror("Erro", f"Não foi possível abrir a pasta:\n{e}")
         except Exception as e:
             messagebox.showerror("Erro na exportação", str(e))
+        finally:
+            self.progress_label.config(text="")
+            # Reabilita todos os campos após exportação
+            self.start_btn.config(state=tk.NORMAL)
+            self.machine_entry.config(state=tk.NORMAL)
+            self.radio_txt.config(state=tk.NORMAL)
+            self.radio_pdf.config(state=tk.NORMAL)
+            self.radio_ambos.config(state=tk.NORMAL)
+            self.export_btn.config(state=tk.NORMAL)
+            self.exit_btn.config(state=tk.NORMAL)
 
 if __name__ == "__main__":
     app = CSInfoApp()
