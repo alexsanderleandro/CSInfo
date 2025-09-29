@@ -1,61 +1,134 @@
+
 import tkinter as tk
 from tkinter import ttk, messagebox
+from tkinter.scrolledtext import ScrolledText
 import threading
 import os
 from csinfo import main as csinfo_main
 
+# --------- Função para configurar estilos visuais ---------
+def estilo_botoes():
+    style = ttk.Style()
+    style.theme_use('clam')
+    style.configure('TButton',
+        font=('Segoe UI', 10, 'bold'),
+        foreground='white',
+        background='#1976D2',
+        borderwidth=0,
+        padding=10,
+        relief='flat'
+    )
+    style.map('TButton',
+        background=[('active', '#1565C0'), ('hover', '#1565C0')],
+        foreground=[('disabled', '#ccc')]
+    )
+    style.configure('Rounded.TButton',
+        font=('Segoe UI', 10, 'bold'),
+        foreground='white',
+        background='#1976D2',
+        borderwidth=0,
+        padding=10,
+        relief='flat'
+    )
+    style.map('Rounded.TButton',
+        background=[('active', '#1565C0'), ('hover', '#1565C0')],
+        foreground=[('disabled', '#ccc')]
+    )
+
+
+# --------- Classe principal adaptada ---------
 class CSInfoApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("CSInfo - Inventário de Hardware e Software")
-        self.geometry("900x600")
+        self.title("CSInfo – Inventário de Hardware e Software")
+        self.geometry("900x650")
+        self.configure(bg='#f4f6f9')
         self.resizable(False, False)
-        self.create_widgets()
+        estilo_botoes()
+        self.criar_layout()
 
-    def create_widgets(self):
-        self.label = tk.Label(self, text="CSInfo - Análise dos ativos de hardware e software do computador - by CEOsoftware", font=("Helvetica", 10, "bold"), fg="#003366")
-        self.label.pack(pady=10)
+    def criar_layout(self):
+        # Título
+        self.label = tk.Label(self, text="CSInfo – Inventário de Hardware e Software", font=("Segoe UI", 16, "bold"), fg="#003366", bg="#f4f6f9")
+        self.label.pack(pady=(20, 10))
 
-    # ...existing code...
+        # Frame de entrada
+        frame_entrada = tk.Frame(self, bg='#f4f6f9')
+        frame_entrada.pack(pady=(10, 5))
+        label_nome = tk.Label(frame_entrada, text="Nome da máquina:", font=("Segoe UI", 10, "bold"), fg="#333", bg="#f4f6f9")
+        label_nome.grid(row=0, column=0, padx=(0, 8), sticky='e')
 
         self.machine_var = tk.StringVar()
-        def to_uppercase(*args):
-            value = self.machine_var.get()
-            self.machine_var.set(value.upper())
-        self.machine_var.trace_add('write', to_uppercase)
-        machine_frame = tk.Frame(self)
-        machine_frame.pack(pady=5)
-        tk.Label(machine_frame, text="Nome da máquina (em branco para a local):").pack(side=tk.LEFT)
-        self.machine_entry = tk.Entry(machine_frame, textvariable=self.machine_var, width=25)
-        self.machine_entry.pack(side=tk.LEFT)
+        self.machine_entry = tk.Entry(frame_entrada, textvariable=self.machine_var, font=('Segoe UI', 10), width=40, relief='solid', justify='center')
+        self.machine_entry.grid(row=0, column=1)
+        self.placeholder = "Deixe em branco para máquina local"
+        self.machine_entry.insert(0, self.placeholder)
+        self.machine_entry.config(fg='#888', font=('Segoe UI', 9, 'italic'), justify='center')
+        def limitar_input_e_maiusculo(*args):
+            valor = self.machine_var.get()
+            valor_maiusculo = valor.upper()
+            if len(valor_maiusculo) > 40:
+                valor_maiusculo = valor_maiusculo[:40]
+            if valor != valor_maiusculo:
+                self.machine_var.set(valor_maiusculo)
+            elif len(valor_maiusculo) > 40:
+                self.machine_var.set(valor_maiusculo)
+        self.machine_var.trace_add('write', limitar_input_e_maiusculo)
+        def on_focus_in(event):
+            if self.machine_entry.get() == self.placeholder:
+                self.machine_entry.delete(0, tk.END)
+                self.machine_entry.config(fg='#222', font=('Segoe UI', 10), justify='center')
+        def on_focus_out(event):
+            if not self.machine_entry.get():
+                self.machine_entry.insert(0, self.placeholder)
+                self.machine_entry.config(fg='#888', font=('Segoe UI', 9, 'italic'), justify='center')
+        self.machine_entry.bind("<FocusIn>", on_focus_in)
+        self.machine_entry.bind("<FocusOut>", on_focus_out)
 
-        self.start_btn = tk.Button(self, text="Iniciar", command=self.start_process, width=15)
-        self.start_btn.pack(pady=10)
+        # Botão Iniciar
+        self.start_btn = ttk.Button(self, text="▶ Iniciar", style='Rounded.TButton', command=self.start_process)
+        self.start_btn.pack(pady=(10, 15))
 
-        self.progress_label = tk.Label(self, text="", font=("Helvetica", 10), wraplength=500, justify=tk.LEFT)
-        self.progress_label.pack(pady=2)
-
-        self.info_text = tk.Text(self, height=20, width=110, font=("Consolas", 9))
-        self.info_text.pack(pady=5)
+        # Área de resultados
+        frame_result = tk.Frame(self, bg='#f4f6f9')
+        frame_result.pack(pady=(5, 10))
+        self.info_text = ScrolledText(frame_result, width=110, height=20, font=('Consolas', 9),
+                                      bg='white', fg='#222', relief='solid', borderwidth=1)
+        self.info_text.pack()
         self.info_text.config(state=tk.DISABLED)
 
-        # Opções de exportação no final do form
-        export_frame = tk.Frame(self)
-        export_frame.pack(pady=10)
-        tk.Label(export_frame, text="Tipo de exportação:").pack(side=tk.LEFT)
-        self.export_var = tk.StringVar(value="txt")
-        self.radio_txt = ttk.Radiobutton(export_frame, text="TXT", variable=self.export_var, value="txt", state=tk.DISABLED)
-        self.radio_txt.pack(side=tk.LEFT)
-        self.radio_pdf = ttk.Radiobutton(export_frame, text="PDF", variable=self.export_var, value="pdf", state=tk.DISABLED)
-        self.radio_pdf.pack(side=tk.LEFT)
-        self.radio_ambos = ttk.Radiobutton(export_frame, text="Ambos", variable=self.export_var, value="ambos", state=tk.DISABLED)
-        self.radio_ambos.pack(side=tk.LEFT)
-    # Barra de progresso removida
-        self.export_btn = tk.Button(self, text="Exportar", command=self.exportar, width=15)
-        self.export_btn.pack(pady=10)
+        # Barra de progresso / mensagem
+        self.progress_label = tk.Label(self, text="", font=('Segoe UI', 10, 'bold'), fg='#1976D2', bg='#f4f6f9')
+        self.progress_label.pack(pady=(5, 0))
+
+        # Rodapé: Exportação
+        frame_export = tk.Frame(self, bg='#f4f6f9')
+        frame_export.pack(pady=(15, 5))
+        label_export = tk.Label(frame_export, text="Exportar resultado:", font=('Segoe UI', 10, 'bold'), fg='#333', bg='#f4f6f9')
+        label_export.grid(row=0, column=0, padx=(0, 8))
+        self.export_var = tk.StringVar(value='txt')
+        self.radio_txt = ttk.Radiobutton(frame_export, text='TXT', variable=self.export_var, value='txt')
+        self.radio_pdf = ttk.Radiobutton(frame_export, text='PDF', variable=self.export_var, value='pdf')
+        self.radio_ambos = ttk.Radiobutton(frame_export, text='Ambos', variable=self.export_var, value='ambos')
+        self.radio_txt.grid(row=0, column=1, padx=5)
+        self.radio_pdf.grid(row=0, column=2, padx=5)
+        self.radio_ambos.grid(row=0, column=3, padx=5)
+
+        # Botões Exportar e Sair
+        frame_botoes = tk.Frame(self, bg='#f4f6f9')
+        frame_botoes.pack(pady=(10, 20))
+        self.export_btn = ttk.Button(frame_botoes, text="💾 Exportar", style='Rounded.TButton', command=self.exportar)
+        self.export_btn.grid(row=0, column=0, padx=10)
+        self.exit_btn = ttk.Button(frame_botoes, text="✖ Sair", style='Rounded.TButton', command=self.quit)
+        self.exit_btn.grid(row=0, column=1, padx=10)
+
+        # Inicialmente, desabilita botões de exportação
         self.export_btn.config(state=tk.DISABLED)
-        self.exit_btn = tk.Button(self, text="Sair", command=self.quit, width=15)
-        self.exit_btn.pack(pady=10)
+        self.radio_txt.config(state=tk.DISABLED)
+        self.radio_pdf.config(state=tk.DISABLED)
+        self.radio_ambos.config(state=tk.DISABLED)
+
+    # ...métodos start_process, run_csinfo, exportar permanecem iguais, apenas adaptando para os novos widgets...
 
     def start_process(self):
         self.start_btn.config(state=tk.DISABLED)
@@ -74,9 +147,13 @@ class CSInfoApp(tk.Tk):
     def run_csinfo(self):
         try:
             import platform
-            machine_name = self.machine_var.get().strip() or None
-            if machine_name and machine_name.upper() == platform.node().upper():
+            valor_input = self.machine_var.get().strip()
+            if not valor_input or valor_input == self.placeholder:
                 machine_name = None
+            elif valor_input.upper() == platform.node().upper():
+                machine_name = None
+            else:
+                machine_name = valor_input
             if machine_name:
                 self.progress_label.config(text=f"Acessando a máquina {machine_name}...", fg="black", font=("Helvetica", 10, "bold"))
                 self.update_idletasks()
