@@ -1,0 +1,156 @@
+﻿CSInfo – Inventário de Hardware e Software
+Análise dos ativos de hardware e software do computador
+
+Nome do computador: CEOSOFT-138
+Tipo: Notebook
+
+Relatório gerado em: 29/09/2025 - 17:48
+
+INFORMAÇÕES DO SISTEMA
+Versão do sistema operacional: Microsoft Windows 11 Pro (Version 10.0.22000) - 64 bits
+  Status do sistema operacional: Ativado
+
+Versão do Office: Microsoft Office Professional Plus 2019 - pt-br 16.0.19127.20240
+  Status do Office: Ativado
+
+SQL Server: NÃO INSTALADO
+
+Antivírus 1: Kaspersky | Status: Ativado
+Antivírus 2: Windows Defender | Status: Desconhecido
+
+Rede: Domínio: ceosoftwaread.net
+
+INFORMAÇÕES DE HARDWARE
+Memória RAM total: 10.9 GB
+  Pente de Memória 1: 4 GB | DDR4 | 2667 MHz | SO-DIMM
+    Fabricante: Unknown
+  Pente de Memória 2: 8 GB | DDR4 | 2667 MHz | SO-DIMM
+    Fabricante: Unknown
+
+Processador 1: AMD Ryzen 5 2500U with Radeon Vega Mobile Gfx  
+  Cores: 4 físicos | 8 lógicos
+  Cache: L2: 2 MB | L3: 4 MB
+  Fabricante: AuthenticAMD
+
+Disco 1: NÃO OBTIDO | Tamanho: NÃO OBTIDO
+  Tipo: NÃO OBTIDO | Interface: NÃO OBTIDO
+Unidades lógicas: NÃO OBTIDO
+
+Monitor 1: NÃO OBTIDO | Modelo: NÃO OBTIDO | Serial: NÃO OBTIDO
+
+Teclado conectado: SIM
+Mouse conectado: SIM
+
+Placa mãe: RR | Modelo: Metapod_RR | Serial: NBGY91100394105F559501
+
+Placa de Rede 1: Realtek(R) PCI(e) Ethernet Controller | Fabricante: Realtek | Velocidade: 1000 Mbps | MAC: 08:97:98:64:F9:16
+
+Placa de Vídeo 1: BB Capture Driver | Fabricante: Blueberry Consultants | Memória: N/A | Tipo: Onboard (Integrada)
+Placa de Vídeo 2: AMD Radeon(TM) Vega 8 Graphics | Fabricante: Advanced Micro Devices, Inc. | Memória: 1 GB | Tipo: Onboard (Integrada)
+
+Impressora 1: OneNote (Desktop) | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Send to Microsoft OneNote 16 Driver
+Impressora 2: Microsoft XPS Document Writer | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Microsoft XPS Document Writer v4
+Impressora 3: Microsoft Print to PDF | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Microsoft Print To PDF
+Impressora 4: Fax | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Microsoft Shared Fax Driver
+
+ADMINISTRADORES
+Administrador 1: Administrador
+Administrador 2: Admins. do domínio
+Administrador 3: alex
+Administrador 4: Angelo.Gabriel
+Administrador 5: ceosoftware
+Administrador 6: Marco.Aurelio
+
+SOFTWARES INSTALADOS
+1. BB TestAssistant 2 | Versão: N/A | Editor: Blueberry Software (UK) Ltd.
+2. Data Dynamics ActiveReports Professional 2 | Versão: 2.3.0.1261 | Editor: Data Dynamics, Ltd.
+3. DiagnosticsHub_CollectionService | Versão: 17.12.35318 | Editor: Microsoft Corporation
+4. Driver do Microsoft OLE DB para SQL Server | Versão: 18.7.4.0 | Editor: Microsoft Corporation
+5. ERP CEOSoftware 8_2 | Versão: 8.2 | Editor: CEOSoftware Sistemas de Informática
+6. Escrituração Digital ECF 11.2.1 | Versão: 11.2.1 | Editor: Receita Federal do Brasil
+7. FileZilla 3.66.5 | Versão: 3.66.5 | Editor: Tim Kosse
+8. Foxit PDF Reader | Versão: 2025.1.0.27937 | Editor: Foxit Software Inc.
+9. GatewayComponents | Versão: 15.242.5 | Editor: Microsoft Corporation
+10. Google Chrome | Versão: 140.0.7339.208 | Editor: Google LLC
+11. GraphDataSetComponents | Versão: 15.242.5 | Editor: Microsoft Corporation
+12. Integration Services | Versão: 16.0.5491.1 | Editor: Microsoft Corporation
+13. Kaspersky | Versão: 21.22.7.466 | Editor: Kaspersky
+14. Kaspersky VPN | Versão: 21.3.10.391 | Editor: Kaspersky
+15. Microsoft Edge | Versão: 140.0.3485.94 | Editor: Microsoft Corporation
+16. Microsoft Edge WebView2 Runtime | Versão: 140.0.3485.94 | Editor: Microsoft Corporation
+17. Microsoft Fabric Integration Runtime Preview | Versão: 5.46.9015.2 | Editor: Microsoft Corporation
+18. Microsoft Help Viewer 2.3 | Versão: 2.3.28307 | Editor: Microsoft Corporation
+19. Microsoft ODBC Driver 17 for SQL Server | Versão: 17.10.6.1 | Editor: Microsoft Corporation
+20. Microsoft Office Professional Plus 2019 - pt-br | Versão: 16.0.19127.20240 | Editor: Microsoft Corporation
+21. Microsoft SQL Server Management Studio - 20.0 | Versão: 20.0.70.0 | Editor: Microsoft Corporation
+22. Microsoft Teams Meeting Add-in for Microsoft Office | Versão: 1.24.31301 | Editor: Microsoft
+23. Microsoft Visual C++ 2013 x86 Additional Runtime - 12.0.40664 | Versão: 12.0.40664 | Editor: Microsoft Corporation
+24. Microsoft Visual C++ 2013 x86 Minimum Runtime - 12.0.40664 | Versão: 12.0.40664 | Editor: Microsoft Corporation
+25. Microsoft Visual C++ 2022 X64 Additional Runtime - 14.44.35208 | Versão: 14.44.35208 | Editor: Microsoft Corporation
+26. Microsoft Visual C++ 2022 X64 Minimum Runtime - 14.44.35208 | Versão: 14.44.35208 | Editor: Microsoft Corporation
+27. Microsoft Visual C++ 2022 X86 Additional Runtime - 14.44.35208 | Versão: 14.44.35208 | Editor: Microsoft Corporation
+28. Microsoft Visual C++ 2022 X86 Minimum Runtime - 14.44.35208 | Versão: 14.44.35208 | Editor: Microsoft Corporation
+29. Microsoft Visual Studio Installer | Versão: 3.14.2075.50697 | Editor: Microsoft Corporation
+30. Microsoft Visual Studio Setup Configuration | Versão: 3.12.2140.44225 | Editor: Microsoft Corporation
+31. Microsoft Visual Studio Setup WMI Provider | Versão: 3.12.2140.44225 | Editor: Microsoft Corporation
+32. Microsoft Visual Studio Tools for Applications 2019 | Versão: 16.0.31110 | Editor: Microsoft Corporation
+33. Microsoft Visual Studio Tools for Applications 2019 x64 Hosting Support | Versão: 16.0.31110 | Editor: Microsoft Corporation
+34. Microsoft Visual Studio Tools for Applications 2019 x86 Hosting Support | Versão: 16.0.31110 | Editor: Microsoft Corporation
+35. Notepad++ (64-bit x64) | Versão: 8.7.5 | Editor: Notepad++ Team
+36. Office 16 Click-to-Run Extensibility Component | Versão: 16.0.19127.20154 | Editor: Microsoft Corporation
+37. Office 16 Click-to-Run Extensibility Component 64-bit Registration | Versão: 16.0.19127.20154 | Editor: Microsoft Corporation
+38. Office 16 Click-to-Run Licensing Component | Versão: 16.0.19127.20240 | Editor: Microsoft Corporation
+39. Office 16 Click-to-Run Localization Component | Versão: 16.0.19127.20154 | Editor: Microsoft Corporation
+40. On-premises data gateway | Versão: 3000.242.5 | Editor: Microsoft Corporation
+41. OpenVPN 2.4.12-I601-Win10  | Versão: 2.4.12-I601-Win10 | Editor: OpenVPN Technologies, Inc.
+42. Pacote de Idiomas do Microsoft Help Viewer 2.3 – PTB | Versão: 2.3.28107 | Editor: Microsoft Corporation
+43. Pacote de Idiomas do SQL Server Management Studio - Português | Versão: 20.0.70.0 | Editor: Microsoft Corp.
+44. PersonalGatewayComponents | Versão: 15.214.8 | Editor: Microsoft Corporation
+45. PRN - Edite | Versão: 2.07.00 | Editor: PROCERGS -  Cia. de Processamento de Dados do Estado do Rio Grande do Sul
+46. Provedor Microsoft Analysis Services OLE DB | Versão: 16.0.5143.0 | Editor: Microsoft Corporation
+47. Shell isolado do Visual Studio 2017 para o pacote de idiomas do SSMS – Português (Brasil) | Versão: 15.0.28307.421 | Editor: Microsoft Corporation
+48. Sped Contábil 10.3.3 | Versão: 10.3.3 | Editor: Receita Federal do Brasil
+49. Sped ECF PVA | Versão: PVA | Editor: N/A
+50. Sped Fiscal 2.1.1-SNAPSHOT | Versão: 2.1.1-SNAPSHOT | Editor: N/A
+51. Sped Fiscal ICMS IPI 5.0.3 | Versão: 5.0.3 | Editor: Receita Federal do Brasil
+52. SQL Server Integration Services Singleton | Versão: 17.0.808.0 | Editor: Microsoft Corporation
+53. SQL Server Management Studio | Versão: 20.0.70.0 | Editor: Microsoft Corp.
+54. SQL Server Management Studio 21 | Versão: 21.2.5 | Editor: Microsoft Corporation
+55. SSMS Post Install Tasks | Versão: 20.0.70.0 | Editor: Microsoft Corporation
+56. TAP-Windows 9.24.2 | Versão: 9.24.2 | Editor: OpenVPN Technologies, Inc.
+57. Validador Sintegra 5.4.0 | Versão: N/A | Editor: Secretaria da Fazenda do Estado do Rio Grande do Sul
+58. Visual Studio 2017 Isolated Shell for SSMS | Versão: 15.0.28307.421 | Editor: Microsoft Corporation
+59. vs_communitymsires | Versão: 17.14.36015 | Editor: Microsoft Corporation
+60. vs_communitysharedmsi | Versão: 17.14.36025 | Editor: Microsoft Corporation
+61. vs_communityx64msi | Versão: 17.14.36025 | Editor: Microsoft Corporation
+62. vs_CoreEditorFonts | Versão: 17.7.40001 | Editor: Microsoft Corporation
+63. vs_filehandler_amd64 | Versão: 17.14.36024 | Editor: Microsoft Corporation
+64. vs_filehandler_x86 | Versão: 17.14.36024 | Editor: Microsoft Corporation
+65. vs_FileTracker_Singleton | Versão: 17.14.36015 | Editor: Microsoft Corporation
+66. vs_githubprotocolhandlermsi | Versão: 17.14.36015 | Editor: Microsoft Corporation
+67. vs_minshellinteropsharedmsi | Versão: 17.14.36015 | Editor: Microsoft Corporation
+68. vs_minshellinteropx64msi | Versão: 17.14.36015 | Editor: Microsoft Corporation
+69. vs_minshellmsires | Versão: 17.14.36015 | Editor: Microsoft Corporation
+70. vs_minshellsharedmsi | Versão: 17.14.36024 | Editor: Microsoft Corporation
+71. vs_minshellx64msi | Versão: 17.14.36015 | Editor: Microsoft Corporation
+72. vs_ssmsprotocolselectormsi | Versão: 17.14.36015 | Editor: Microsoft Corporation
+73. vs_ssmsprotocolselectormsires | Versão: 17.14.36015 | Editor: Microsoft Corporation
+74. vs_vswebprotocolselectormsi | Versão: 17.14.36015 | Editor: Microsoft Corporation
+75. vs_vswebprotocolselectormsires | Versão: 17.14.36015 | Editor: Microsoft Corporation
+76. WinRAR 7.13 (64-bit) | Versão: 7.13.0 | Editor: win.rar GmbH
+
+INFORMAÇÕES DE REDE
+Adaptador 1: Realtek(R) PCI(e) Ethernet Controller
+  IP: 192.168.0.110 | Gateway: 192.168.0.1 | DNS: 192.168.0.3, 192.168.0.4, 8.8.8.8 | MAC: 08:97:98:64:F9:16
+
+SEGURANÇA DO SISTEMA
+Firewall:
+  Perfil: Domain | Status: Ativado
+  Perfil: Private | Status: Ativado
+  Perfil: Public | Status: Ativado
+
+Windows Update:
+  13 atualizações pendentes
+
+
+CSInfo by CEOsoftware

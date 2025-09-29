@@ -1,3 +1,144 @@
+# --- NOVAS FUNÇÕES DE ANÁLISE AVANÇADA ---
+import socket
+import json
+
+def get_network_details(computer_name=None):
+    ps = r'''
+    $adapters = Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled -eq $true }
+    $out = @()
+    foreach ($a in $adapters) {
+        $ip = $a.IPAddress[0]
+        $gw = $a.DefaultIPGateway[0]
+        $dns = $a.DNSServerSearchOrder -join ", "
+        $mac = $a.MACAddress
+        $desc = $a.Description
+        $out += [PSCustomObject]@{
+            IP = $ip; Gateway = $gw; DNS = $dns; MAC = $mac; Descricao = $desc
+        }
+    }
+    $out | ConvertTo-Json -Compress
+    '''
+    out = run_powershell(ps, computer_name=computer_name)
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        return parsed if parsed else []
+    except Exception:
+        return []
+
+def get_firewall_status(computer_name=None):
+    ps = r'''
+    try {
+        $profiles = Get-NetFirewallProfile
+        $out = @()
+        foreach ($p in $profiles) {
+            $out += [PSCustomObject]@{
+                Perfil = $p.Name; Ativado = $p.Enabled
+            }
+        }
+        $out | ConvertTo-Json -Compress
+    } catch { "NÃO OBTIDO" }
+    '''
+    out = run_powershell(ps, computer_name=computer_name)
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        return parsed if parsed else []
+    except Exception:
+        return []
+
+def get_bitlocker_status(computer_name=None):
+    ps = r'''
+    try {
+        $vols = Get-BitLockerVolume -ErrorAction SilentlyContinue
+        $out = @()
+        foreach ($v in $vols) {
+            $out += [PSCustomObject]@{
+                Unidade = $v.VolumeLetter; Protegido = $v.ProtectionStatus; Status = $v.LockStatus
+            }
+        }
+        $out | ConvertTo-Json -Compress
+    } catch { "NÃO OBTIDO" }
+    '''
+    out = run_powershell(ps, computer_name=computer_name)
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        return parsed if parsed else []
+    except Exception:
+        return []
+
+def get_windows_update_status(computer_name=None):
+    ps = r'''
+    try {
+        $session = New-Object -ComObject Microsoft.Update.Session
+        $searcher = $session.CreateUpdateSearcher()
+        $result = $searcher.Search("IsInstalled=0")
+        $count = $result.Updates.Count
+        if ($count -eq 0) { "Nenhuma atualização pendente" }
+        else { "$count atualizações pendentes" }
+    } catch { "NÃO OBTIDO" }
+    '''
+    out = run_powershell(ps, computer_name=computer_name)
+    return out.strip() if out else "NÃO OBTIDO"
+
+def get_running_processes(computer_name=None):
+    ps = r'''
+    Get-Process | Select-Object -First 10 Name,Id,CPU | ConvertTo-Json -Compress
+    '''
+    out = run_powershell(ps, computer_name=computer_name)
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        return parsed if parsed else []
+    except Exception:
+        return []
+
+def get_critical_services(computer_name=None):
+    ps = r'''
+    $names = @("wuauserv", "WinDefend", "BITS", "Spooler", "LanmanServer", "LanmanWorkstation")
+    $out = @()
+    foreach ($n in $names) {
+        $s = Get-Service -Name $n -ErrorAction SilentlyContinue
+        if ($s) {
+            $out += [PSCustomObject]@{Nome=$s.Name; Status=$s.Status}
+        }
+    }
+    $out | ConvertTo-Json -Compress
+    '''
+    out = run_powershell(ps, computer_name=computer_name)
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        return parsed if parsed else []
+    except Exception:
+        return []
+def get_firewall_controller(computer_name=None):
+    ps = r'''
+    try {
+        $namespace = "root\\SecurityCenter2"
+        $firewallProducts = Get-WmiObject -Namespace $namespace -Class FirewallProduct -ErrorAction SilentlyContinue
+        $out = @()
+        foreach ($fw in $firewallProducts) {
+            $out += $fw.displayName
+        }
+        if ($out.Count -gt 0) {
+            $out -join ", "
+        } else {
+            "Windows Firewall (padrão)"
+        }
+    } catch {
+        "NÃO OBTIDO"
+    }
+    '''
+    out = run_powershell(ps, computer_name=computer_name)
+    return out.strip() if out else "NÃO OBTIDO"
+
 # coletar_info_maquina.py
 import subprocess
 import platform
@@ -159,7 +300,7 @@ def get_disk_info(computer_name=None):
     } catch {}
     $disks | ConvertTo-Json -Compress
     """
-    out = run_powershell(ps, computer_name=computer_name)
+    out = run_powershell(ps, computer_name)
     items = []
     try:
         parsed = json.loads(out) if out else []
@@ -380,7 +521,7 @@ def get_monitor_infos(computer_name=None):
         } catch {}
         $s | ConvertTo-Json -Compress
         """
-        out = run_powershell(ps, computer_name=computer_name)
+        out = run_powershell(ps, computer_name)
         try:
                 parsed = json.loads(out) if out else []
                 if isinstance(parsed, dict):
@@ -808,7 +949,7 @@ def get_logical_drives_info(computer_name=None):
     
     $sortedDrives | ConvertTo-Json -Compress
     """
-    out = run_powershell(ps, computer_name=computer_name)
+    out = run_powershell(ps, computer_name)
     try:
         parsed = json.loads(out) if out else []
         if isinstance(parsed, dict):
@@ -1153,7 +1294,7 @@ def remove_duplicate_lines(lines):
         if not current_line or "===" in current_line:
             filtered_lines.append(lines[i])
             continue
-            
+        
         # Remover linha se for idêntica à anterior
         if current_line != previous_line:
             filtered_lines.append(lines[i])
@@ -1436,6 +1577,28 @@ def write_pdf_report(path, lines, computer_name):
                 fontName='Helvetica-Bold',
                 alignment=TA_LEFT
             ),
+            "INFORMAÇÕES DE REDE": ParagraphStyle(
+                'SectionTitleNet',
+                parent=styles['Heading2'],
+                fontSize=10,
+                spaceAfter=6,
+                spaceBefore=6,
+                leading=12,
+                textColor=colors.Color(0.1, 0.3, 0.7),  # Azul escuro
+                fontName='Helvetica-Bold',
+                alignment=TA_LEFT
+            ),
+            "SEGURANÇA DO SISTEMA": ParagraphStyle(
+                'SectionTitleSec',
+                parent=styles['Heading2'],
+                fontSize=10,
+                spaceAfter=6,
+                spaceBefore=6,
+                leading=12,
+                textColor=colors.Color(0.7, 0.1, 0.1),  # Vermelho escuro
+                fontName='Helvetica-Bold',
+                alignment=TA_LEFT
+            ),
         }
         
         # Estilo para texto normal
@@ -1538,7 +1701,36 @@ def check_remote_machine(computer_name):
     except Exception:
         return False
 
+def is_remote_admin(computer_name=None):
+    if not computer_name or computer_name.lower() in ("localhost", os.environ.get("COMPUTERNAME", "").lower()):
+        return True
+    ps = r'''
+    try {
+        $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        $adminGroup = [ADSI]("WinNT://%s/Administrators")
+        $isAdmin = $false
+        foreach ($member in $adminGroup.Members()) {
+            if ($member.GetType().InvokeMember("Name", 'GetProperty', $null, $member, $null) -eq $user.Split("\\")[1]) {
+                $isAdmin = $true
+                break
+            }
+        }
+        $isAdmin
+    } catch {
+        $false
+    }
+    ''' % computer_name
+    out = run_powershell(ps, computer_name=computer_name)
+    return str(out).strip().lower() in ("true", "1")
+
 def main(export_type=None, barra_callback=None, computer_name=None):
+    # --- COLETA DE INFORMAÇÕES AVANÇADAS ---
+    network_details = get_network_details(computer_name)
+    firewall_status = get_firewall_status(computer_name)
+    windows_update_status = get_windows_update_status(computer_name)
+    running_processes = get_running_processes(computer_name)
+    critical_services = get_critical_services(computer_name)
+    firewall_controller = get_firewall_controller(computer_name)
     modo_gui = export_type is not None or barra_callback is not None
     # Se chamado pela GUI, não pedir input nem printar
     if not modo_gui:
@@ -1734,6 +1926,22 @@ def main(export_type=None, barra_callback=None, computer_name=None):
             free = padrao(drive.get('Free', ''))
             file_system = padrao(drive.get('FileSystem', ''))
             label = padrao(drive.get('Label', ''))
+            # Truncar espaço usado para 2 casas decimais
+            try:
+                used_float = float(used)
+                used = f"{used_float:.2f}"
+            except:
+                pass
+            try:
+                size_float = float(size)
+                size = f"{size_float:.2f}"
+            except:
+                pass
+            try:
+                free_float = float(free)
+                free = f"{free_float:.2f}"
+            except:
+                pass
             lines.append(f"Unidade {drive_letter} ({label}) | Total: {size} GB | Usado: {used} GB | Livre: {free} GB | Sistema: {file_system}")
     else:
         lines.append("Unidades lógicas: NÃO OBTIDO")
@@ -1830,6 +2038,44 @@ def main(export_type=None, barra_callback=None, computer_name=None):
     else:
         lines.append("Nenhum software detectado")
     barra_progresso(23)
+
+    # --- NOVAS SEÇÕES ---
+    lines.append("")
+    lines.append("INFORMAÇÕES DE REDE")
+    if network_details:
+        for idx, net in enumerate(network_details, start=1):
+            ip = padrao(net.get('IP', ''))
+            gw = padrao(net.get('Gateway', ''))
+            dns = padrao(net.get('DNS', ''))
+            mac = padrao(net.get('MAC', ''))
+            desc = padrao(net.get('Descricao', ''))
+            lines.append(f"Adaptador {idx}: {desc}")
+            lines.append(f"  IP: {ip} | Gateway: {gw} | DNS: {dns} | MAC: {mac}")
+    else:
+        lines.append("Informações de rede: NÃO OBTIDO")
+
+    lines.append("")
+    lines.append("SEGURANÇA DO SISTEMA")
+    # Firewall
+    lines.append("Firewall:")
+    if firewall_status:
+        for fw in firewall_status:
+            perfil = padrao(fw.get('Perfil', ''))
+            ativado = 'Ativado' if fw.get('Ativado', False) else 'Desativado'
+            lines.append(f"  Perfil: {perfil} | Status: {ativado}")
+    else:
+        lines.append("  Status: NÃO OBTIDO")
+    # Controle externo do firewall
+    if firewall_controller and firewall_controller != "Windows Firewall (padrão)" and firewall_controller != "NÃO OBTIDO":
+        lines.append(f"Firewall controlado por: {firewall_controller}")
+    # Espaço de uma linha antes do Windows Update
+    lines.append("")
+    # Windows Update
+    if windows_update_status:
+        lines.append("Windows Update:")
+        lines.append(f"  {windows_update_status}")
+    else:
+        lines.append("Windows Update: NÃO OBTIDO")
     
     # RODAPÉ
     lines.append("")

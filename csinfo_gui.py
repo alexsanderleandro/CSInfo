@@ -1,4 +1,3 @@
-
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkinter.scrolledtext import ScrolledText
@@ -9,35 +8,56 @@ from csinfo import main as csinfo_main
 # --------- Função para configurar estilos visuais ---------
 def estilo_botoes():
     style = ttk.Style()
-    style.theme_use('clam')
-    style.configure('TButton',
-        font=('Segoe UI', 10, 'bold'),
-        foreground='white',
-        background='#1976D2',
-        borderwidth=0,
-        padding=10,
-        relief='flat'
-    )
-    style.map('TButton',
-        background=[('active', '#1565C0'), ('hover', '#1565C0')],
-        foreground=[('disabled', '#ccc')]
-    )
+    style.theme_use('default')
     style.configure('Rounded.TButton',
-        font=('Segoe UI', 10, 'bold'),
-        foreground='white',
-        background='#1976D2',
-        borderwidth=0,
-        padding=10,
-        relief='flat'
-    )
+                   font=('Segoe UI', 10, 'bold'),
+                   padding=8,
+                   borderwidth=0,
+                   relief='flat',
+                   foreground='#fff',
+                   background='#1976D2',
+                   focusthickness=3,
+                   focuscolor='none')
     style.map('Rounded.TButton',
-        background=[('active', '#1565C0'), ('hover', '#1565C0')],
-        foreground=[('disabled', '#ccc')]
-    )
+              background=[('active', '#1565C0'), ('disabled', '#b0b0b0')])
+    # Botão Exportar - verde
+    style.configure('Export.TButton',
+                   font=('Segoe UI', 10, 'bold'),
+                   padding=8,
+                   borderwidth=0,
+                   relief='flat',
+                   foreground='#fff',
+                   background='#43A047')
+    style.map('Export.TButton',
+              background=[('active', '#388E3C'), ('disabled', '#b0b0b0')])
+    # Botão Sair - vermelho
+    style.configure('Exit.TButton',
+                   font=('Segoe UI', 10, 'bold'),
+                   padding=8,
+                   borderwidth=0,
+                   relief='flat',
+                   foreground='#fff',
+                   background='#E53935')
+    style.map('Exit.TButton',
+              background=[('active', '#B71C1C'), ('disabled', '#b0b0b0')])
+    # Radiobutton circular
+    style.configure('Custom.TRadiobutton',
+                   indicatorcolor='#1976D2',
+                   indicatordiameter=14,
+                   indicatorsize=14,
+                   font=('Segoe UI', 10),
+                   padding=4)
+    style.map('Custom.TRadiobutton',
+              indicatorcolor=[('selected', '#1976D2'), ('active', '#1565C0')])
 
 
 # --------- Classe principal adaptada ---------
 class CSInfoApp(tk.Tk):
+    def bloquear_fechar(self):
+        pass  # Ignora o evento de fechar
+    def desbloquear_fechar(self):
+        self.protocol("WM_DELETE_WINDOW", self.quit)
+
     def __init__(self):
         super().__init__()
         self.title("CSInfo – Inventário de Hardware e Software")
@@ -55,8 +75,8 @@ class CSInfoApp(tk.Tk):
         # Frame de entrada
         frame_entrada = tk.Frame(self, bg='#f4f6f9')
         frame_entrada.pack(pady=(10, 5))
-        label_nome = tk.Label(frame_entrada, text="Nome da máquina:", font=("Segoe UI", 10, "bold"), fg="#333", bg="#f4f6f9")
-        label_nome.grid(row=0, column=0, padx=(0, 8), sticky='e')
+        label_machine = tk.Label(frame_entrada, text="Nome da máquina:", font=('Segoe UI', 10, 'normal'), fg='#333', bg='#f4f6f9')
+        label_machine.grid(row=0, column=0, padx=(0, 8), sticky='e')
 
         self.machine_var = tk.StringVar()
         self.machine_entry = tk.Entry(frame_entrada, textvariable=self.machine_var, font=('Segoe UI', 10), width=40, relief='solid', justify='center')
@@ -82,6 +102,9 @@ class CSInfoApp(tk.Tk):
             if not self.machine_entry.get():
                 self.machine_entry.insert(0, self.placeholder)
                 self.machine_entry.config(fg='#888', font=('Segoe UI', 9, 'italic'), justify='center')
+                self.machine_var.set("")  # Garante que a variável não fique com o placeholder
+            elif self.machine_entry.get() == self.placeholder:
+                self.machine_var.set("")  # Garante que a variável não fique com o placeholder
         self.machine_entry.bind("<FocusIn>", on_focus_in)
         self.machine_entry.bind("<FocusOut>", on_focus_out)
 
@@ -95,7 +118,10 @@ class CSInfoApp(tk.Tk):
         self.info_text = ScrolledText(frame_result, width=110, height=20, font=('Consolas', 9),
                                       bg='white', fg='#222', relief='solid', borderwidth=1)
         self.info_text.pack()
-        self.info_text.config(state=tk.DISABLED)
+        self.info_text.config(state=tk.DISABLED)  # Sempre inicia como somente leitura
+        # Remove qualquer binding que permita digitação
+        self.info_text.bind('<Key>', lambda e: 'break')
+        self.info_text.bind('<Button-1>', lambda e: 'break')
 
         # Barra de progresso / mensagem
         self.progress_label = tk.Label(self, text="", font=('Segoe UI', 10, 'bold'), fg='#1976D2', bg='#f4f6f9')
@@ -104,12 +130,12 @@ class CSInfoApp(tk.Tk):
         # Rodapé: Exportação
         frame_export = tk.Frame(self, bg='#f4f6f9')
         frame_export.pack(pady=(15, 5))
-        label_export = tk.Label(frame_export, text="Exportar resultado:", font=('Segoe UI', 10, 'bold'), fg='#333', bg='#f4f6f9')
+        label_export = tk.Label(frame_export, text="Exportar resultado:", font=('Segoe UI', 10, 'normal'), fg='#333', bg='#f4f6f9')
         label_export.grid(row=0, column=0, padx=(0, 8))
         self.export_var = tk.StringVar(value='txt')
-        self.radio_txt = ttk.Radiobutton(frame_export, text='TXT', variable=self.export_var, value='txt')
-        self.radio_pdf = ttk.Radiobutton(frame_export, text='PDF', variable=self.export_var, value='pdf')
-        self.radio_ambos = ttk.Radiobutton(frame_export, text='Ambos', variable=self.export_var, value='ambos')
+        self.radio_txt = tk.Radiobutton(frame_export, text='TXT', variable=self.export_var, value='txt', font=('Segoe UI', 10), bg='#f4f6f9', activebackground='#e3e6ea', selectcolor='white', highlightthickness=0)
+        self.radio_pdf = tk.Radiobutton(frame_export, text='PDF', variable=self.export_var, value='pdf', font=('Segoe UI', 10), bg='#f4f6f9', activebackground='#e3e6ea', selectcolor='white', highlightthickness=0)
+        self.radio_ambos = tk.Radiobutton(frame_export, text='Ambos', variable=self.export_var, value='ambos', font=('Segoe UI', 10), bg='#f4f6f9', activebackground='#e3e6ea', selectcolor='white', highlightthickness=0)
         self.radio_txt.grid(row=0, column=1, padx=5)
         self.radio_pdf.grid(row=0, column=2, padx=5)
         self.radio_ambos.grid(row=0, column=3, padx=5)
@@ -117,9 +143,9 @@ class CSInfoApp(tk.Tk):
         # Botões Exportar e Sair
         frame_botoes = tk.Frame(self, bg='#f4f6f9')
         frame_botoes.pack(pady=(10, 20))
-        self.export_btn = ttk.Button(frame_botoes, text="💾 Exportar", style='Rounded.TButton', command=self.exportar)
+        self.export_btn = ttk.Button(frame_botoes, text="💾 Exportar", style='Export.TButton', command=self.exportar)
         self.export_btn.grid(row=0, column=0, padx=10)
-        self.exit_btn = ttk.Button(frame_botoes, text="✖ Sair", style='Rounded.TButton', command=self.quit)
+        self.exit_btn = ttk.Button(frame_botoes, text="✖ Sair", style='Exit.TButton', command=self.quit)
         self.exit_btn.grid(row=0, column=1, padx=10)
 
         # Inicialmente, desabilita botões de exportação
@@ -128,9 +154,17 @@ class CSInfoApp(tk.Tk):
         self.radio_pdf.config(state=tk.DISABLED)
         self.radio_ambos.config(state=tk.DISABLED)
 
+        # Rodapé centralizado
+        rodape = tk.Label(self, text="CEOsoftware Sistemas", font=("Segoe UI", 8), fg="#666", bg="#f4f6f9")
+        rodape.pack(side=tk.BOTTOM, pady=(0, 6))
+        rodape.configure(anchor="center", justify="center")
+
     # ...métodos start_process, run_csinfo, exportar permanecem iguais, apenas adaptando para os novos widgets...
 
     def start_process(self):
+        self.protocol("WM_DELETE_WINDOW", self.bloquear_fechar)  # Bloqueia o botão X
+        self.config(cursor="wait")
+        self.info_text.config(cursor="wait", state=tk.DISABLED)
         self.start_btn.config(state=tk.DISABLED)
         self.machine_entry.config(state=tk.DISABLED)
         self.radio_txt.config(state=tk.DISABLED)
@@ -139,9 +173,7 @@ class CSInfoApp(tk.Tk):
         self.export_btn.config(state=tk.DISABLED)
         self.exit_btn.config(state=tk.DISABLED)
         self.progress_label.config(text="", fg="black")
-        self.info_text.config(state=tk.NORMAL)
         self.info_text.delete(1.0, tk.END)
-        self.info_text.config(state=tk.DISABLED)
         threading.Thread(target=self.run_csinfo, daemon=True).start()
 
     def run_csinfo(self):
@@ -167,6 +199,7 @@ class CSInfoApp(tk.Tk):
                 self.radio_ambos.config(state=tk.DISABLED)
                 self.export_btn.config(state=tk.DISABLED)
                 self.exit_btn.config(state=tk.NORMAL)
+                self.desbloquear_fechar()  # Reabilita o botão X
                 return
             self.capturado = []
             self.info_text.config(state=tk.NORMAL)
@@ -180,13 +213,13 @@ class CSInfoApp(tk.Tk):
             # Ao final, mostra apenas o relatório completo
             txt_path = resultado.get('txt')
             if txt_path and os.path.exists(txt_path):
-                self.info_text.config(state=tk.NORMAL)
+                self.info_text.config(state=tk.NORMAL)  # Habilita só para atualizar
                 self.info_text.delete(1.0, tk.END)
                 with open(txt_path, encoding='utf-8') as f:
                     conteudo = f.read()
                 self.info_text.insert(tk.END, conteudo)
                 self.info_text.see(tk.END)
-                self.info_text.config(state=tk.DISABLED)
+                self.info_text.config(state=tk.DISABLED)  # Volta para somente leitura
             else:
                 self.info_text.config(state=tk.NORMAL)
                 self.info_text.delete(1.0, tk.END)
@@ -200,12 +233,15 @@ class CSInfoApp(tk.Tk):
             messagebox.showerror("Erro", str(e))
             self.export_btn.config(state=tk.DISABLED)
         finally:
+            self.config(cursor="arrow")
+            self.info_text.config(cursor="arrow", state=tk.NORMAL)
             self.start_btn.config(state=tk.NORMAL)
             self.machine_entry.config(state=tk.NORMAL)
             self.radio_txt.config(state=tk.NORMAL)
             self.radio_pdf.config(state=tk.NORMAL)
             self.radio_ambos.config(state=tk.NORMAL)
             self.exit_btn.config(state=tk.NORMAL)
+            self.desbloquear_fechar()  # Reabilita o botão X
 
     def update_progress(self, value, etapa_texto=None):
         def atualizar():
@@ -215,7 +251,9 @@ class CSInfoApp(tk.Tk):
         self.after(0, atualizar)
 
     def exportar(self):
-        # Desabilita todos os campos do formulário
+        self.protocol("WM_DELETE_WINDOW", self.bloquear_fechar)  # Bloqueia o botão X
+        self.config(cursor="wait")
+        self.info_text.config(cursor="wait", state=tk.DISABLED)
         self.start_btn.config(state=tk.DISABLED)
         self.machine_entry.config(state=tk.DISABLED)
         self.radio_txt.config(state=tk.DISABLED)
@@ -223,7 +261,7 @@ class CSInfoApp(tk.Tk):
         self.radio_ambos.config(state=tk.DISABLED)
         self.export_btn.config(state=tk.DISABLED)
         self.exit_btn.config(state=tk.DISABLED)
-        self.progress_label.config(text="Exportando relatório, aguarde...", font=("Helvetica", 10, "bold"))
+        self.progress_label.config(text="Exportando o relatório, aguarde...", font=("Helvetica", 10, "bold"))
         self.update_idletasks()
         try:
             machine_name = self.machine_var.get().strip() or None
@@ -238,7 +276,6 @@ class CSInfoApp(tk.Tk):
             messagebox.showinfo("Exportação", "\n".join(msg) if msg else "Nenhum arquivo exportado.")
             if resultado.get('txt') or resultado.get('pdf'):
                 caminho = resultado.get('txt') or resultado.get('pdf')
-                # Pergunta se deseja abrir a pasta
                 abrir = messagebox.askyesno("Abrir pasta", "Deseja abrir o diretório onde o relatório foi salvo?")
                 if abrir:
                     import os
@@ -251,8 +288,9 @@ class CSInfoApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("Erro na exportação", str(e))
         finally:
+            self.config(cursor="arrow")
+            self.info_text.config(cursor="arrow", state=tk.NORMAL)
             self.progress_label.config(text="")
-            # Reabilita todos os campos após exportação
             self.start_btn.config(state=tk.NORMAL)
             self.machine_entry.config(state=tk.NORMAL)
             self.radio_txt.config(state=tk.NORMAL)
@@ -260,6 +298,14 @@ class CSInfoApp(tk.Tk):
             self.radio_ambos.config(state=tk.NORMAL)
             self.export_btn.config(state=tk.NORMAL)
             self.exit_btn.config(state=tk.NORMAL)
+            self.desbloquear_fechar()  # Reabilita o botão X
+
+    def get_computer_name_input(self):
+        value = self.machine_var.get().strip()
+        # Garante que o placeholder nunca seja considerado
+        if not value or value == self.placeholder or value.lower() == self.placeholder.lower():
+            return None  # None indica máquina local
+        return value
 
 if __name__ == "__main__":
     app = CSInfoApp()
