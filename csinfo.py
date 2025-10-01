@@ -643,7 +643,7 @@ def get_sql_server_info(computer_name=None):
     
     $sqlInstances | ConvertTo-Json -Compress
     """
-    out = run_powershell(ps, computer_name=computer_name)
+    out = run_powershell(ps, computer_name)
     try:
         parsed = json.loads(out) if out else []
         if isinstance(parsed, dict):
@@ -708,7 +708,7 @@ def get_network_adapters_info(computer_name=None):
     
     $networkAdapters | ConvertTo-Json -Compress
     """
-    out = run_powershell(ps, computer_name=computer_name)
+    out = run_powershell(ps, computer_name)
     try:
         parsed = json.loads(out) if out else []
         if isinstance(parsed, dict):
@@ -779,7 +779,7 @@ def get_processor_info(computer_name=None):
     
     $processorInfo | ConvertTo-Json -Compress
     """
-    out = run_powershell(ps, computer_name=computer_name)
+    out = run_powershell(ps, computer_name)
     try:
         parsed = json.loads(out) if out else []
         if isinstance(parsed, dict):
@@ -907,7 +907,7 @@ def get_video_cards_info(computer_name=None):
     
     $videoCards | ConvertTo-Json -Compress
     """
-    out = run_powershell(ps, computer_name=computer_name)
+    out = run_powershell(ps, computer_name)
     try:
         parsed = json.loads(out) if out else []
         if isinstance(parsed, dict):
@@ -1065,7 +1065,7 @@ def get_installed_software(computer_name=None):
     
     $sortedSoftware | ConvertTo-Json -Compress
     """
-    out = run_powershell(ps, computer_name=computer_name)
+    out = run_powershell(ps, computer_name)
     try:
         parsed = json.loads(out) if out else []
         if isinstance(parsed, dict):
@@ -1189,7 +1189,7 @@ def get_antivirus_info(computer_name=None):
     
     $uniqueList | ConvertTo-Json -Compress
     """
-    out = run_powershell(ps, computer_name=computer_name)
+    out = run_powershell(ps, computer_name)
     try:
         parsed = json.loads(out) if out else []
         if isinstance(parsed, dict):
@@ -1216,7 +1216,7 @@ def get_keyboard_mouse_status(computer_name=None):
         HasMouse = $hasMouse
     } | ConvertTo-Json -Compress
     """
-    out = run_powershell(ps, computer_name=computer_name)
+    out = run_powershell(ps, computer_name)
     try:
         parsed = json.loads(out) if out else {}
         return parsed.get('HasKeyboard', False), parsed.get('HasMouse', False)
@@ -1637,13 +1637,23 @@ def write_pdf_report(path, lines, computer_name):
         )
         
         def clean_text(text):
-            """Limpa texto para PDF"""
-            return (text.replace('&', '&amp;')
+            """Limpa texto para PDF: remove caracteres de controle (ex: \x00) e escapa marcações"""
+            if text is None:
+                return ""
+            # Converte para str e remove caracteres de controle que geram quadrados pretos
+            txt = str(text)
+            # Remove caracteres de controle (0x00-0x1F, 0x7F-0x9F)
+            txt = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', txt)
+            # Substituições seguras para o mini-markup do ReportLab
+            return (txt.replace('&', '&amp;')
                        .replace('<', '&lt;')
                        .replace('>', '&gt;')
                        .replace('"', '&quot;')
                        .replace("'", '&#39;'))
         
+        # Adiciona espaçamento extra no início do story (aplica na primeira página)
+        story.append(Spacer(1, 18))
+
         # Processar cada linha exatamente como no TXT
         for idx, line in enumerate(filtered_lines):
             line_stripped = line.strip()
@@ -1651,11 +1661,7 @@ def write_pdf_report(path, lines, computer_name):
             if not line_stripped:
                 story.append(Spacer(1, 6))
                 continue
-            # Remover cabeçalho duplicado nas páginas seguintes
-            if idx == 0 and line_stripped == "CSInfo – Inventário de Hardware e Software":
-                continue
-            if idx == 1 and line_stripped == "Análise dos ativos de hardware e software do computador":
-                continue
+            # (Cabeçalho é desenhado pelo template; não há linhas de cabeçalho no corpo)
             # Títulos de seções com cor personalizada
             if line_stripped in section_title_styles:
                 story.append(Paragraph(f"<b>{clean_text(line_stripped)}</b>", section_title_styles[line_stripped]))
@@ -1732,6 +1738,9 @@ def main(export_type=None, barra_callback=None, computer_name=None):
     critical_services = get_critical_services(computer_name)
     firewall_controller = get_firewall_controller(computer_name)
     modo_gui = export_type is not None or barra_callback is not None
+    # Inicializar flags de geração
+    gerar_txt = False
+    gerar_pdf = False
     # Se chamado pela GUI, não pedir input nem printar
     if not modo_gui:
         print("=== Coletor de Informações de Máquina ===")
@@ -1795,6 +1804,10 @@ def main(export_type=None, barra_callback=None, computer_name=None):
         elif not modo_gui:
             print(f"\r{barra} | {etapa_texto} | Tempo: {tempo}s", end='', flush=True)
 
+    # Se a função externa de callback foi passada, linka-a à barra_progresso
+    if barra_callback and callable(barra_callback):
+        barra_progresso.callback = barra_callback
+
     # Adiciona callback para cada linha apurada
     def add_line(line):
         lines.append(line)
@@ -1802,6 +1815,18 @@ def main(export_type=None, barra_callback=None, computer_name=None):
             barra_callback(None, line)
 
     machine = get_machine_name(computer_name); barra_progresso(1)
+    import getpass
+    if not computer_name or computer_name.lower() == machine.lower():
+        usuario_logado = getpass.getuser()
+    else:
+        import importlib.util, sys
+        mod_name = "network_discovery"
+        mod_path = os.path.join(os.path.dirname(__file__), "network_discovery.py")
+        spec = importlib.util.spec_from_file_location(mod_name, mod_path)
+        network_discovery = importlib.util.module_from_spec(spec)
+        sys.modules[mod_name] = network_discovery
+        spec.loader.exec_module(network_discovery)
+        usuario_logado = network_discovery.get_logged_user(machine)
     safe_name = safe_filename(machine)
     filename = f"info_maquina_{safe_name}.txt"
     path = os.path.join(os.getcwd(), filename)
@@ -1810,19 +1835,16 @@ def main(export_type=None, barra_callback=None, computer_name=None):
     def padrao(valor):
         return valor if valor and str(valor).strip() else "NÃO OBTIDO"
     
-    # CABEÇALHO NOVO
-    add_line("CSInfo – Inventário de Hardware e Software")
-    add_line("Análise dos ativos de hardware e software do computador")
+    # LINHAS INICIAIS SOLICITADAS: Nome, Tipo, Gerado por
+    add_line(f"Nome do computador: {machine}")
+    add_line(f"Tipo: {'Notebook' if is_laptop(computer_name) else 'Desktop'}")
+    add_line(f"Gerado por: {usuario_logado}")
     add_line("")
-    
-    # NOME DA MÁQUINA E TIPO
-    add_line(f"Nome do computador: {machine}"); barra_progresso(2)
-    add_line(f"Tipo: {'Notebook' if is_laptop(computer_name) else 'Desktop'}"); barra_progresso(3)
-    add_line("")
-    
+    # (Cabeçalho visual será desenhado pelo template do PDF; não adicionamos essas linhas ao corpo)
     # DATA DE GERAÇÃO
     add_line(f"Relatório gerado em: {datetime.now().strftime('%d/%m/%Y - %H:%M')}")
     add_line("")
+    barra_progresso(2)
     
     # INFORMAÇÕES DO SISTEMA
     add_line("INFORMAÇÕES DO SISTEMA")
@@ -2082,19 +2104,31 @@ def main(export_type=None, barra_callback=None, computer_name=None):
     lines.append("")
     lines.append("CSInfo by CEOsoftware")
 
-    if gerar_txt:
-        write_report(path, lines)
-        barra_progresso(23)
-        print(f"✅ Arquivo TXT gerado: {path}")
-
-    if gerar_pdf:
-        pdf_path = path.replace('.txt', '.pdf')
-        print("Gerando arquivo PDF...")
-        if write_pdf_report(pdf_path, lines, machine):
-            print(f"✅ Arquivo PDF gerado com sucesso: {pdf_path}")
-        else:
-            print("❌ Erro ao gerar arquivo PDF.")
-            pdf_path = None
+    # Só gera TXT/PDF se export_type for passado explicitamente e for um dos valores esperados
+    pdf_path = None
+    print(f"DEBUG csinfo: export_type={repr(export_type)}, gerar_txt={gerar_txt}, gerar_pdf={gerar_pdf}")
+    if export_type in ('txt', 'pdf', 'ambos'):
+        # Escrita explícita conforme seleção
+        if export_type in ('txt', 'ambos'):
+            try:
+                print(f"DEBUG csinfo: Gravando TXT em: {path}")
+                write_report(path, lines)
+                barra_progresso(23)
+                print(f"✅ Arquivo TXT gerado: {path}")
+            except Exception as e:
+                print(f"❌ Erro ao escrever TXT: {e}")
+        if export_type in ('pdf', 'ambos'):
+            pdf_path = path.replace('.txt', '.pdf')
+            print("Gerando arquivo PDF...")
+            try:
+                ok = write_pdf_report(pdf_path, lines, machine)
+                if ok:
+                    print(f"✅ Arquivo PDF gerado com sucesso: {pdf_path}")
+                else:
+                    print("❌ Erro ao gerar arquivo PDF.")
+                    pdf_path = None
+            except Exception as e:
+                print(f"❌ Exceção ao gerar PDF: {e}")
 
     # Perguntar se deseja abrir os arquivos gerados
     if not modo_gui:
@@ -2105,25 +2139,13 @@ def main(export_type=None, barra_callback=None, computer_name=None):
                     os.startfile(path)
                 except Exception as e:
                     print(f"Não foi possível abrir o arquivo TXT: {e}")
-
-        if gerar_pdf and pdf_path and os.path.exists(pdf_path):
-            resposta_pdf_abrir = input(f"Deseja abrir o arquivo PDF gerado? [s/N]: ").strip().lower()
-            if resposta_pdf_abrir == 's':
-                try:
-                    os.startfile(pdf_path)
-                except Exception as e:
-                    print(f"Não foi possível abrir o arquivo PDF: {e}")
-
-    # GUI: não perguntar, apenas retornar caminhos dos arquivos gerados
-    if modo_gui:
-        resultado = {
-            'txt': path if gerar_txt else None,
-            'pdf': pdf_path if gerar_pdf and pdf_path else None
-        }
-        return resultado
-
-def main_cli():
-    main()
-
-if __name__ == "__main__":
-    main_cli()
+    
+    # Retornar sempre os caminhos dos arquivos gerados (ou None) e as linhas coletadas
+    resultado = {
+        'txt': path if export_type in ('txt', 'ambos') and os.path.exists(path) else None,
+        'pdf': pdf_path if pdf_path and os.path.exists(pdf_path) else None,
+        'lines': lines,
+        'machine': machine,
+        'user': usuario_logado
+    }
+    return resultado
