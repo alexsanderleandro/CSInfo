@@ -73,7 +73,15 @@ class CSInfoApp(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("CSInfo – Inventário de Hardware e Software")
+        # Incluir versão do pacote no título
+        try:
+            ver = getattr(csinfo, '__version__', None)
+            if ver:
+                self.title(f"CSInfo – Inventário de Hardware e Software  v{ver}")
+            else:
+                self.title("CSInfo – Inventário de Hardware e Software")
+        except Exception:
+            self.title("CSInfo – Inventário de Hardware e Software")
         self.geometry("900x650")
         self.configure(bg='#f4f6f9')
         self.resizable(False, False)
@@ -168,6 +176,7 @@ class CSInfoApp(tk.Tk):
             pass
 
     def criar_layout(self):
+        # Menu removido (Ajuda/Sobre) a pedido — nada a configurar aqui
         # Título
         self.label = tk.Label(self, text="CSInfo – Inventário de Hardware e Software", font=("Segoe UI", 16, "bold"), fg="#003366", bg="#f4f6f9")
         self.label.pack(pady=(20, 10))
@@ -269,10 +278,21 @@ class CSInfoApp(tk.Tk):
         self.radio_pdf.config(state=tk.DISABLED)
         self.radio_ambos.config(state=tk.DISABLED)
 
+        # Rodapé centralizado com versão
+        # Rodapé sem versão do app (apenas o nome da empresa)
+        rodape_text = "CEOsoftware Sistemas"
         # Rodapé centralizado
-        rodape = tk.Label(self, text="CEOsoftware Sistemas", font=("Segoe UI", 8), fg="#666", bg="#f4f6f9")
+        rodape = tk.Label(self, text=rodape_text, font=("Segoe UI", 8), fg="#666", bg="#f4f6f9")
         rodape.pack(side=tk.BOTTOM, pady=(0, 6))
         rodape.configure(anchor="center", justify="center")
+
+    def show_about(self):
+        try:
+            ver = getattr(csinfo, '__version__', 'desconhecida')
+            info = f"CSInfo — versão {ver}\n\nGerado por CEOsoftware Sistemas"
+        except Exception:
+            info = "CSInfo — versão desconhecida"
+        messagebox.showinfo("Sobre CSInfo", info)
 
     # ...métodos start_process, run_csinfo, exportar permanecem iguais, apenas adaptando para os novos widgets...
 

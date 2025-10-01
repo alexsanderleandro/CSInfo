@@ -1315,9 +1315,22 @@ def remove_duplicate_lines(lines):
 def write_report(path, lines):
     # Remove duplicidades antes de escrever
     filtered_lines = remove_duplicate_lines(lines)
-    
+    # Cabeçalho com versão e data
+    try:
+        import csinfo as _cs
+        ver = getattr(_cs, '__version__', None)
+    except Exception:
+        ver = None
+    # Novo cabeçalho conforme solicitado:
+    # CEOsoftware Sistemas
+    # CSInfo - Inventário de hardware e software - v{versão}
+    header = [
+        "CEOsoftware Sistemas",
+        f"CSInfo - Inventário de hardware e software - v{ver if ver else 'desconhecida'}",
+        "",
+    ]
     with open(path, 'w', encoding='utf-8-sig') as f:
-        f.write("\n".join(filtered_lines))
+        f.write("\n".join(header + filtered_lines))
 
 def organize_pdf_data(lines, computer_name):
     """Organiza os dados para o PDF conforme a nova estrutura solicitada"""
@@ -1477,15 +1490,14 @@ def write_pdf_report(path, lines, computer_name):
                 # Configurar fonte para rodapé - tamanho 7, cinza 75%
                 self.setFont("Helvetica", 7)
                 self.setFillColor(colors.Color(0.25, 0.25, 0.25))  # Cinza 75% (25% preto)
-                
                 # Numeração de páginas (lado esquerdo)
                 page_text = f"Página {page_num} de {total_pages}"
                 self.drawString(0.5*inch, 0.3*inch, page_text)
-                
-                # Texto "CSInfo by CEOsoftware" centralizado
+
+                # Texto "CSInfo by CEOsoftware" centralizado (mantém apenas este texto + numeração)
                 footer_text = "CSInfo by CEOsoftware"
                 text_width = self.stringWidth(footer_text, "Helvetica", 7)
-                page_width = A4[0]  # Largura da página A4
+                page_width = A4[0]
                 x_center = (page_width - text_width) / 2
                 self.drawString(x_center, 0.3*inch, footer_text)
         
@@ -1510,13 +1522,42 @@ def write_pdf_report(path, lines, computer_name):
             # Ajusta a posição do cabeçalho para não sobrepor o conteúdo
             y_title = A4[1]-0.7*inch if doc.page == 1 else A4[1]-0.6*inch
             y_subtitle = A4[1]-0.9*inch if doc.page == 1 else A4[1]-0.8*inch
+            y_version = A4[1]-1.05*inch if doc.page == 1 else A4[1]-0.95*inch
             y_line = A4[1]-0.95*inch if doc.page == 1 else A4[1]-0.85*inch
-            canvas.setFont("Helvetica-Bold", 14)
+            # Novo cabeçalho alinhado ao formato do TXT
+            try:
+                import csinfo as _cs
+                _ver = getattr(_cs, '__version__', None)
+            except Exception:
+                _ver = None
+            # Tentar desenhar o ícone do app (assets/ico.png) no canto esquerdo do cabeçalho
+            try:
+                import sys
+                # Resolve caminho ao arquivo assets mesmo quando empacotado pelo PyInstaller
+                if getattr(sys, 'frozen', False):
+                    base = sys._MEIPASS
+                else:
+                    base = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+                png_path = os.path.join(base, 'assets', 'ico.png')
+                if os.path.exists(png_path):
+                    # tamanho do ícone em polegadas
+                    img_size = 0.5 * inch
+                    # drawImage usa coordenada (x, y) do canto inferior esquerdo
+                    x_img = 0.6 * inch
+                    y_img = y_title - (img_size / 2)
+                    try:
+                        canvas.drawImage(png_path, x_img, y_img, width=img_size, height=img_size, preserveAspectRatio=True, mask='auto')
+                    except Exception:
+                        # se drawImage falhar (formatos), ignorar a imagem
+                        pass
+            except Exception:
+                pass
+
+            # Cabeçalho: apenas o título com versão (removido 'CEOsoftware Sistemas')
+            ver_text = f"v{_ver}" if _ver else "vdesconhecida"
+            canvas.setFont("Helvetica-Bold", 11)
             canvas.setFillColor(colors.navy)
-            canvas.drawCentredString(A4[0]/2, y_title, "CSInfo \u2013 Invent\u00e1rio de Hardware e Software")
-            canvas.setFont("Helvetica", 10)
-            canvas.setFillColor(colors.black)
-            canvas.drawCentredString(A4[0]/2, y_subtitle, "An\u00e1lise dos ativos de hardware e software do computador")
+            canvas.drawCentredString(A4[0]/2, y_title, f"CSInfo - Inventário de hardware e software - {ver_text}")
             canvas.setStrokeColor(colors.Color(0.7, 0.7, 0.7))
             canvas.setLineWidth(0.5)
             canvas.line(0.5*inch, y_line, A4[0]-0.5*inch, y_line)

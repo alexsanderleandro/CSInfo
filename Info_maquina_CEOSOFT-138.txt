@@ -1,0 +1,77 @@
+﻿CEOsoftware Sistemas
+CSInfo - Inventário de hardware e software - v1.0.1
+
+Nome do computador: CEOSOFT-138
+Tipo: Notebook
+Gerado por: alex
+
+Relatório gerado em: 01/10/2025 - 17:15
+
+INFORMAÇÕES DO SISTEMA
+Versão do sistema operacional: Microsoft Windows 11 Pro (Version 10.0.22000) - 64 bits
+  Status do sistema operacional: Ativado
+
+Versão do Office: Microsoft Office Professional Plus 2019 - pt-br 16.0.19127.20240
+  Status do Office: Ativado
+
+SQL Server: NÃO INSTALADO
+
+Antivírus: NÃO DETECTADO
+
+Rede: Domínio: ceosoftwaread.net
+
+INFORMAÇÕES DE HARDWARE
+Memória RAM total: 10.9 GB
+  Pente de Memória 1: 4 GB | DDR4 | 2667 MHz | SO-DIMM
+    Fabricante: Unknown
+  Pente de Memória 2: 8 GB | DDR4 | 2667 MHz | SO-DIMM
+    Fabricante: Unknown
+
+Processador: NÃO OBTIDO
+
+Disco 1: NÃO OBTIDO | Tamanho: NÃO OBTIDO
+  Tipo: NÃO OBTIDO | Interface: NÃO OBTIDO
+Unidades lógicas: NÃO OBTIDO
+
+Monitor 1: NÃO OBTIDO | Modelo: NÃO OBTIDO | Serial: NÃO OBTIDO
+
+Teclado conectado: NÃO
+Mouse conectado: NÃO
+
+Placa mãe: RR | Modelo: Metapod_RR | Serial: NBGY91100394105F559501
+
+Placa de Rede: NÃO OBTIDO
+
+Placa de Vídeo: NÃO OBTIDO
+
+Impressora 1: OneNote (Desktop) | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Send to Microsoft OneNote 16 Driver
+Impressora 2: Microsoft XPS Document Writer | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Microsoft XPS Document Writer v4
+Impressora 3: Microsoft Print to PDF | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Microsoft Print To PDF
+Impressora 4: Fax | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Microsoft Shared Fax Driver
+
+ADMINISTRADORES
+Administrador 1: CEOSOFT-138\Administrador
+Administrador 2: CEOSOFT-138\ceosoftware
+Administrador 3: CEOSOFTWAREAD\Admins. do domínio
+Administrador 4: CEOSOFTWAREAD\alex
+Administrador 5: CEOSOFTWAREAD\Angelo.Gabriel
+Administrador 6: CEOSOFTWAREAD\Marco.Aurelio
+
+SOFTWARES INSTALADOS
+Nenhum software detectado
+
+INFORMAÇÕES DE REDE
+Adaptador 1: Realtek(R) PCI(e) Ethernet Controller
+  IP: 192.168.0.110 | Gateway: 192.168.0.1 | DNS: 192.168.0.3, 192.168.0.4, 8.8.8.8 | MAC: 08:97:98:64:F9:16
+
+SEGURANÇA DO SISTEMA
+Firewall:
+  Perfil: Domain | Status: Ativado
+  Perfil: Private | Status: Ativado
+  Perfil: Public | Status: Ativado
+
+Windows Update:
+  13 atualizações pendentes
+
+
+CSInfo by CEOsoftware
