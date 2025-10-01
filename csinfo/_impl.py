@@ -1742,18 +1742,41 @@ def write_pdf_report(path, lines, computer_name):
 def check_remote_machine(computer_name):
     if not computer_name:
         return True
-    import subprocess
+    import subprocess, os, socket, time
     try:
-        ping = subprocess.run(["ping", "-n", "1", computer_name], capture_output=True, text=True, timeout=5)
-        if ping.returncode != 0:
-            return False
-        import socket
+        # 1) Ping com algumas tentativas (sem abrir janela no Windows)
+        creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000) if os.name == 'nt' else 0
+        def try_ping():
+            try:
+                p = subprocess.run(["ping", "-n", "1", computer_name], capture_output=True, text=True, timeout=3, creationflags=creationflags)
+                return p.returncode == 0
+            except Exception:
+                return False
+
+        for _ in range(2):
+            if try_ping():
+                return True
+            time.sleep(0.4)
+
+        # 2) Tentar conectar em portas comuns (WinRM HTTP/HTTPS, SMB) - se qualquer uma responder, consideramos acessível
+        ports = [5985, 5986, 445]
+        for port in ports:
+            try:
+                sock = socket.create_connection((computer_name, port), timeout=2)
+                sock.close()
+                return True
+            except Exception:
+                pass
+
+        # 3) Tentativa final via WinRM/PowerShell (pode falhar se WinRM não estiver configurado)
         try:
-            sock = socket.create_connection((computer_name, 5985), timeout=3)
-            sock.close()
+            out = run_powershell('Write-Output $env:COMPUTERNAME', computer_name=computer_name)
+            if out and str(out).strip():
+                return True
         except Exception:
-            return False
-        return True
+            pass
+
+        return False
     except Exception:
         return False
 
