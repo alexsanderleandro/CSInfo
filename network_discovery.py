@@ -8,7 +8,12 @@ def get_logged_user(machine):
     # Usa PowerShell ao invés de wmic
     try:
         ps = f"Get-WmiObject -Class Win32_ComputerSystem -ComputerName '{machine}' | Select-Object -ExpandProperty UserName"
-        result = subprocess.check_output(["powershell", "-Command", ps], encoding='utf-8', errors='ignore')
+        # Executar PowerShell sem abrir janela no Windows
+        if os.name == 'nt':
+            creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+            result = subprocess.check_output(["powershell", "-Command", ps], encoding='utf-8', errors='ignore', creationflags=creationflags)
+        else:
+            result = subprocess.check_output(["powershell", "-Command", ps], encoding='utf-8', errors='ignore')
         user = result.strip()
         return user if user else 'Desconhecido'
     except Exception:

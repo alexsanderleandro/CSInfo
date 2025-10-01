@@ -166,7 +166,11 @@ def run_powershell(cmd, timeout=20, computer_name=None):
     cmd_with_encoding = f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {cmd}"
     full = ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', cmd_with_encoding]
     try:
-        out = subprocess.check_output(full, stderr=subprocess.STDOUT, text=True, encoding='utf-8', timeout=timeout)
+        if os.name == 'nt':
+            creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+            out = subprocess.check_output(full, stderr=subprocess.STDOUT, text=True, encoding='utf-8', timeout=timeout, creationflags=creationflags)
+        else:
+            out = subprocess.check_output(full, stderr=subprocess.STDOUT, text=True, encoding='utf-8', timeout=timeout)
         return out.strip()
     except subprocess.CalledProcessError:
         return ""
