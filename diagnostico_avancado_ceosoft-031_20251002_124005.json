@@ -1,0 +1,13 @@
+{
+  "computador": "ceosoft-031",
+  "data_hora": "2025-10-02 12:40:05.705536",
+  "wmi_funcional": true,
+  "get_processor_info": {
+    "sucesso": true,
+    "resultado": null
+  },
+  "get_disk_info": {
+    "sucesso": true,
+    "resultado": null
+  }
+}

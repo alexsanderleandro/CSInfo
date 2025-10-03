@@ -1,0 +1,19 @@
+Metadata-Version: 2.4
+Name: csinfo
+Version: 0.1.0
+Summary: Pacote para coleta de informações do sistema
+Author: Seu Nome
+Author-email: seu.email@exemplo.com
+Keywords: system info hardware
+Requires-Python: >=3.6
+Requires-Dist: wmi
+Requires-Dist: python-dotenv
+Requires-Dist: requests
+Requires-Dist: psutil
+Requires-Dist: pywin32; platform_system == "Windows"
+Dynamic: author
+Dynamic: author-email
+Dynamic: keywords
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

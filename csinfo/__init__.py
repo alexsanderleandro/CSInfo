@@ -15,6 +15,9 @@ from ._impl import (
     get_machine_name as get_machine_name,
     check_remote_machine as check_remote_machine,
     remove_duplicate_lines as remove_duplicate_lines,
+    set_default_credential as set_default_credential,
+    clear_default_credential as clear_default_credential,
+    get_debug_session_log as get_debug_session_log,
 )
 
 __all__ = [
@@ -25,6 +28,9 @@ __all__ = [
     'get_machine_name',
     'check_remote_machine',
     'remove_duplicate_lines',
+    'set_default_credential',
+    'clear_default_credential',
+    'get_debug_session_log',
 ]
 
-__version__ = '1.0.1'
+__version__ = '1.0.2'

@@ -1,0 +1,52 @@
+{
+  "computador": "ceosoft-031",
+  "data_hora": "2025-10-02 12:25:14",
+  "sistema_operacional": "Windows-11-10.0.26100-SP0",
+  "python_version": "3.13.7",
+  "testes": {
+    "arquivos_necessarios": {
+      "csinfo/__init__.py": {
+        "existe": true,
+        "caminho": "C:\\Users\\alex\\Documents\\Python\\VSCode\\CSInfo\\csinfo/__init__.py"
+      },
+      "csinfo/_impl.py": {
+        "existe": true,
+        "caminho": "C:\\Users\\alex\\Documents\\Python\\VSCode\\CSInfo\\csinfo/_impl.py"
+      },
+      "csinfo_gui.py": {
+        "existe": true,
+        "caminho": "C:\\Users\\alex\\Documents\\Python\\VSCode\\CSInfo\\csinfo_gui.py"
+      }
+    },
+    "conectividade": {
+      "sucesso": true,
+      "ip": "192.168.0.114",
+      "saida": "\nDisparando ceosoft-031.ceosoftwaread.net [192.168.0.114] com 32 bytes de dados:\nResposta de 192.168.0.114: bytes=32 tempo<1ms TTL=128\nResposta de 192.168.0.114: bytes=32 tempo=2ms TTL=128\n\nEstat¡sticas do Ping para 192.168.0.114:\n    Pacotes: Enviados = 2, Recebidos = 2, Perdidos = 0 (0% de\n             perda),\nAproximar um n£mero redondo de vezes em milissegundos:\n    M¡nimo = 0ms, M ximo = 2ms, M‚dia = 1ms\n",
+      "erro": null
+    },
+    "permissoes_wmi": {
+      "sucesso": true,
+      "nome_computador": "CEOSOFT-031",
+      "fabricante": "Dell Inc.",
+      "modelo": "Vostro 200"
+    },
+    "servicos_remotos": {
+      "RemoteRegistry": {
+        "status": "Stopped",
+        "iniciado": false,
+        "tipo_inicializacao": "Disabled"
+      },
+      "WinRM": {
+        "status": "Running",
+        "iniciado": true,
+        "tipo_inicializacao": "Auto"
+      },
+      "WMI": {
+        "erro": "Serviço não encontrado"
+      },
+      "DCOM": {
+        "erro": "Serviço não encontrado"
+      }
+    }
+  }
+}

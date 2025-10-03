@@ -1,5 +1,6 @@
 ﻿CEOsoftware Sistemas
 CSInfo - Inventário de hardware e software - v1.0.1
+Gerado por: alex
 
 CSInfo - Resumo Técnico do Dispositivo
 Nome do computador: AUTO_TEST

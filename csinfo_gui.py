@@ -198,6 +198,10 @@ class CSInfoApp(tk.Tk):
         self.start_btn = ttk.Button(frame_entrada, text="▶ Iniciar", style='Rounded.TButton', command=self.start_process)
         self.start_btn.grid(row=0, column=2, padx=(8, 0))
 
+        # Botão para abrir modal de credenciais (pequeno) à esquerda do Start
+        self.creds_btn = ttk.Button(frame_entrada, text="Credenciais...", command=self.open_credentials_modal)
+        self.creds_btn.grid(row=0, column=3, padx=(8,0))
+
         self.placeholder = "Deixe em branco para máquina local"
         self.machine_entry.insert(0, self.placeholder)
         self.machine_entry.config(fg='#888', font=('Segoe UI', 9, 'italic'), justify='center')
@@ -263,6 +267,10 @@ class CSInfoApp(tk.Tk):
         self.radio_txt.grid(row=0, column=1, padx=5)
         self.radio_pdf.grid(row=0, column=2, padx=5)
         self.radio_ambos.grid(row=0, column=3, padx=5)
+        # Checkbox para incluir diagnóstico (log de debug)
+        self.include_debug_var = tk.BooleanVar(value=False)
+        self.chk_debug = tk.Checkbutton(frame_export, text='Incluir diagnóstico', variable=self.include_debug_var, bg='#f4f6f9')
+        self.chk_debug.grid(row=0, column=4, padx=(12,0))
 
         # Botões Exportar e Sair
         frame_botoes = tk.Frame(self, bg='#f4f6f9')
@@ -293,6 +301,68 @@ class CSInfoApp(tk.Tk):
         except Exception:
             info = "CSInfo — versão desconhecida"
         messagebox.showinfo("Sobre CSInfo", info)
+
+    def open_credentials_modal(self):
+        """Abre um modal simples para aceitar DOMAIN\\user e senha. Define credencial padrão em csinfo."""
+        try:
+            modal = tk.Toplevel(self)
+            modal.title("Credenciais remotas")
+            modal.geometry("420x180")
+            modal.transient(self)
+            modal.grab_set()
+
+            lbl = tk.Label(modal, text="Informe credenciais no formato DOMAIN\\user", font=("Segoe UI", 10))
+            lbl.pack(pady=(10, 6))
+
+            frame = tk.Frame(modal)
+            frame.pack(pady=(6, 6), padx=10, fill='x')
+            tk.Label(frame, text="Usuário:", width=12, anchor='w').grid(row=0, column=0)
+            user_var = tk.StringVar()
+            user_entry = tk.Entry(frame, textvariable=user_var, width=36)
+            user_entry.grid(row=0, column=1)
+
+            tk.Label(frame, text="Senha:", width=12, anchor='w').grid(row=1, column=0)
+            pwd_var = tk.StringVar()
+            pwd_entry = tk.Entry(frame, textvariable=pwd_var, width=36, show='*')
+            pwd_entry.grid(row=1, column=1)
+
+            def on_ok():
+                u = user_var.get().strip()
+                p = pwd_var.get()
+                if not u or '\\' not in u:
+                    messagebox.showwarning("Formato inválido", "Informe no formato DOMAIN\\user")
+                    return
+                try:
+                    csinfo.set_default_credential(u, p)
+                    messagebox.showinfo("Credenciais definidas", "Credenciais salvas para uso nas chamadas remotas.")
+                except Exception as e:
+                    messagebox.showerror("Erro", f"Não foi possível salvar as credenciais: {e}")
+                modal.grab_release()
+                modal.destroy()
+
+            def on_clear():
+                try:
+                    csinfo.clear_default_credential()
+                    messagebox.showinfo("Credenciais", "Credenciais padrão removidas.")
+                except Exception:
+                    messagebox.showwarning("Aviso", "Não foi possível remover credenciais (ou nenhuma estava definida).")
+                modal.grab_release()
+                modal.destroy()
+
+            btn_frame = tk.Frame(modal)
+            btn_frame.pack(pady=(6, 8))
+            ok_btn = ttk.Button(btn_frame, text="OK", command=on_ok)
+            ok_btn.grid(row=0, column=0, padx=6)
+            clear_btn = ttk.Button(btn_frame, text="Remover credenciais", command=on_clear)
+            clear_btn.grid(row=0, column=1, padx=6)
+            cancel_btn = ttk.Button(btn_frame, text="Cancelar", command=lambda: (modal.grab_release(), modal.destroy()))
+            cancel_btn.grid(row=0, column=2, padx=6)
+
+            # Focar no campo usuário
+            user_entry.focus_set()
+            modal.wait_window()
+        except Exception as e:
+            messagebox.showerror("Erro", f"Não foi possível abrir o modal de credenciais: {e}")
 
     # ...métodos start_process, run_csinfo, exportar permanecem iguais, apenas adaptando para os novos widgets...
 
@@ -368,8 +438,10 @@ class CSInfoApp(tk.Tk):
                 # Atualiza UI de forma segura na thread principal
                 self.after(0, atualizar_ui)
             print('DEBUG: Chamando csinfo_main')
+            # Se o usuário definiu credenciais via GUI, elas já foram aplicadas via csinfo.set_default_credential
             # Apenas coleta os dados na análise; não gerar arquivos automaticamente
-            resultado = csinfo_main(export_type=None, barra_callback=gui_callback, computer_name=machine_name)
+            include_debug = bool(self.include_debug_var.get())
+            resultado = csinfo_main(export_type=None, barra_callback=gui_callback, computer_name=machine_name, include_debug_on_export=include_debug)
             # Armazena resultado da análise para possível exportação posterior
             self.last_result = resultado
             print('DEBUG: Resultado csinfo_main:', resultado)
@@ -462,7 +534,8 @@ class CSInfoApp(tk.Tk):
                     base_path = os.path.join(os.getcwd(), f"Info_maquina_{safe_name}.txt")
                     if tipo in ('txt', 'ambos'):
                         try:
-                            csinfo.write_report(base_path, lines)
+                            include_debug_reuse = bool(self.include_debug_var.get())
+                            csinfo.write_report(base_path, lines, include_debug=include_debug_reuse)
                             msg.append(f"Arquivo TXT exportado: {base_path}")
                             reused = True
                         except Exception as e:

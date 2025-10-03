@@ -8,6 +8,40 @@ do projeto. Foi movida para dentro do pacote para permitir importação limpa
 # Conteúdo migrado de csinfo.py
 import socket
 import json
+import tempfile
+
+# Helper público: credencial padrão usada por run_powershell quando não é passada explicitamente
+def set_default_credential(user, password):
+    """Define credencial padrão (user, password) usada para tentativas remotas.
+
+    Uso: csinfo.set_default_credential('DOMAIN\\user', 'senha')
+    """
+    try:
+        globals()['_CSINFO_DEFAULT_CREDENTIAL'] = (user, password)
+        return True
+    except Exception:
+        return False
+
+def clear_default_credential():
+    try:
+        if '_CSINFO_DEFAULT_CREDENTIAL' in globals():
+            del globals()['_CSINFO_DEFAULT_CREDENTIAL']
+        return True
+    except Exception:
+        return False
+
+def get_debug_session_log():
+    """Retorna o path do arquivo de sessão de debug atual, se existir. Pode ser usado pela GUI para anexar o log.
+
+    Retorna None se CSINFO_DEBUG não estiver habilitado ou se o log não existir.
+    """
+    try:
+        path = os.environ.get('CSINFO_DEBUG_SESSION') or getattr(run_powershell, '_csinfo_session_log', None)
+        if path and os.path.exists(path):
+            return path
+    except Exception:
+        pass
+    return None
 
 def get_network_details(computer_name=None):
     ps = r'''
@@ -89,7 +123,7 @@ def get_windows_update_status(computer_name=None):
         else { "$count atualizações pendentes" }
     } catch { "NÃO OBTIDO" }
     '''
-    out = run_powershell(ps, computer_name=computer_name)
+    out = run_powershell(ps, computer_name=computer_name, timeout=60, retries=3)
     return out.strip() if out else "NÃO OBTIDO"
 
 def get_running_processes(computer_name=None):
@@ -165,24 +199,182 @@ from reportlab.pdfbase import pdfutils
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase import pdfmetrics
 
-def run_powershell(cmd, timeout=20, computer_name=None):
+def run_powershell(cmd, computer_name=None, timeout=20, retries=2, initial_backoff=0.3, credential=None):
+    """Execute um comando PowerShell com retries/backoff e timeout configurável.
+
+    - timeout: segundos por tentativa (pode ser sobrescrito pela variável de ambiente CSINFO_PS_TIMEOUT)
+    - retries: número de tentativas totais (inclui a primeira)
+    - initial_backoff: tempo inicial em segundos para backoff exponencial
+    """
+    # permitir override global via env
+    try:
+        env_to = int(os.environ.get('CSINFO_PS_TIMEOUT', str(timeout)))
+        timeout = env_to
+    except Exception:
+        pass
+
+    # compatibilidade: se caller passou computer_name como positional (antes era timeout), garantir que computer_name seja uma string ou None
+    if isinstance(computer_name, (int, float)):
+        # recebido um número como segundo argumento -> isso na verdade era timeout; ajustar
+        timeout = computer_name
+        computer_name = None
+
+    # guardar comando original para possíveis re-execucoes
+    original_cmd = cmd
+
+    # se não foi passada credencial explicitamente, tentar usar a default definida por set_default_credential
+    if credential is None:
+        try:
+            credential = globals().get('_CSINFO_DEFAULT_CREDENTIAL')
+        except Exception:
+            credential = None
+
     if computer_name:
-        # Adicionar -ComputerName para execução remota
-        cmd = f"Invoke-Command -ComputerName {computer_name} -ScriptBlock {{ {cmd} }} -ErrorAction SilentlyContinue"
+        # Se foi passada credencial, construir bloco que cria um PSCredential e usa -Credential
+        if credential and isinstance(credential, (list, tuple)) and len(credential) == 2:
+            user, pwd = credential
+            # escapar aspas simples para PowerShell (duplicar) e proteger NULs
+            user_esc = str(user).replace("'", "''")
+            pwd_esc = str(pwd).replace("'", "''")
+            cmd = (
+                f"$sec = ConvertTo-SecureString '{pwd_esc}' -AsPlainText -Force; "
+                f"$cred = New-Object System.Management.Automation.PSCredential('{user_esc}',$sec); "
+                f"Invoke-Command -ComputerName {computer_name} -Credential $cred -ScriptBlock {{ {original_cmd} }} -ErrorAction SilentlyContinue"
+            )
+        else:
+            # Adicionar -ComputerName para execução remota sem credencial
+            cmd = f"Invoke-Command -ComputerName {computer_name} -ScriptBlock {{ {original_cmd} }} -ErrorAction SilentlyContinue"
+
     # Forçar codificação UTF-8 no PowerShell
     cmd_with_encoding = f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {cmd}"
     full = ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', cmd_with_encoding]
+
+    # Usar credencial default do módulo se credential não foi fornecida
     try:
-        if os.name == 'nt':
-            creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
-            out = subprocess.check_output(full, stderr=subprocess.STDOUT, text=True, encoding='utf-8', timeout=timeout, creationflags=creationflags)
-        else:
-            out = subprocess.check_output(full, stderr=subprocess.STDOUT, text=True, encoding='utf-8', timeout=timeout)
-        return out.strip()
-    except subprocess.CalledProcessError:
-        return ""
+        if credential is None and globals().get('_CSINFO_DEFAULT_CREDENTIAL'):
+            credential = globals().get('_CSINFO_DEFAULT_CREDENTIAL')
     except Exception:
-        return ""
+        pass
+
+    # preparar arquivo de sessão (único por execução) quando CSINFO_DEBUG habilitado
+    debug_enabled = bool(os.environ.get('CSINFO_DEBUG'))
+    session_log = None
+    if debug_enabled:
+        # se o usuário passou um caminho customizado para o log de sessão via env, usar
+        session_log = os.environ.get('CSINFO_DEBUG_SESSION')
+        if not session_log:
+            # criar e reutilizar um arquivo na primeira chamada desta execução
+            # armazenamos em uma variável no módulo para não recriar em chamadas subsequentes
+            try:
+                if not hasattr(run_powershell, '_csinfo_session_log') or not run_powershell._csinfo_session_log:
+                    run_powershell._csinfo_session_log = os.path.join(tempfile.gettempdir(), f"csinfo_debug_session_{os.getpid()}_{int(time.time())}.log")
+                session_log = run_powershell._csinfo_session_log
+            except Exception:
+                session_log = os.path.join(tempfile.gettempdir(), f"csinfo_debug_session_{os.getpid()}_{int(time.time())}.log")
+
+    def _write_debug_entry(full_cmd, computer, to, dur=None, return_code=None, output=None, exc=None):
+        """Escreve uma entrada de debug no arquivo de sessão (append) e opcionalmente cria um arquivo individual."""
+        try:
+            header = "--- CSInfo debug entry ---\n"
+            ts = datetime.utcnow().isoformat() + 'Z'
+            lines = [header, f"TIMESTAMP_UTC: {ts}\n", f"COMMAND: {full_cmd}\n", f"COMPUTER: {computer}\n", f"TIMEOUT: {to}\n"]
+            if dur is not None:
+                lines.append(f"DURATION_SECONDS: {dur}\n")
+            if return_code is not None:
+                lines.append(f"RETURN_CODE: {return_code}\n")
+            if exc is not None:
+                lines.append(f"EXCEPTION: {exc}\n")
+            lines.append("OUTPUT:\n")
+            if output:
+                try:
+                    lines.append(output)
+                    if not output.endswith('\n'):
+                        lines.append('\n')
+                except Exception:
+                    lines.append(str(output) + '\n')
+
+            # anexar ao arquivo de sessão
+            if session_log:
+                try:
+                    with open(session_log, 'a', encoding='utf-8', errors='replace') as sfh:
+                        sfh.writelines(lines)
+                except Exception:
+                    pass
+
+            # opcional: manter também arquivos individuais (útil para ferramentas que já esperam esse padrão)
+            if os.environ.get('CSINFO_DEBUG_INDIVIDUAL') == '1':
+                try:
+                    indiv = os.path.join(tempfile.gettempdir(), f"csinfo_debug_{os.getpid()}_{int(time.time())}.log")
+                    with open(indiv, 'w', encoding='utf-8') as fh:
+                        fh.writelines(lines)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    attempt = 0
+    backoff = initial_backoff
+    last_exc = None
+    while attempt < retries:
+        attempt += 1
+        ts = time.time()
+        try:
+            if os.name == 'nt':
+                creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+                out = subprocess.check_output(full, stderr=subprocess.STDOUT, text=True, encoding='utf-8', timeout=timeout, creationflags=creationflags)
+            else:
+                out = subprocess.check_output(full, stderr=subprocess.STDOUT, text=True, encoding='utf-8', timeout=timeout)
+            duration = time.time() - ts
+            # debug
+            if debug_enabled:
+                try:
+                    _write_debug_entry(full, computer_name, timeout, dur=duration, return_code=0, output=out)
+                except Exception:
+                    pass
+            return out.strip()
+        except subprocess.CalledProcessError as cpe:
+            last_exc = cpe
+            # gravar debug e sair (erro do comando)
+            if debug_enabled:
+                try:
+                    _write_debug_entry(full, computer_name, timeout, dur=(time.time()-ts), return_code=getattr(cpe, 'returncode', 'ERR'), output=getattr(cpe, 'output', ''))
+                except Exception:
+                    pass
+            # não retryar em caso de erro específico de execução (mas permitiremos retry em timeout)
+            break
+        except Exception as exc:
+            last_exc = exc
+            # se não for a última tentativa, esperar e retryar
+            if debug_enabled:
+                try:
+                    _write_debug_entry(full, computer_name, timeout, dur=(time.time()-ts), exc=exc)
+                except Exception:
+                    pass
+            if attempt < retries:
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            break
+
+    return ""
+
+    # Se falhou e estamos executando remotamente sem credencial, oferecer prompt interativo (uma vez)
+    # Observação: isso só ocorre se não passamos credential explicitamente
+    if computer_name and not credential:
+        should_prompt = os.environ.get('CSINFO_PROMPT_CREDS', '0') == '1' or sys.stdin.isatty()
+        if should_prompt:
+            try:
+                import getpass
+                prompt_user = input(f"Credenciais necessárias para {computer_name} (formato DOMAIN\\user): ")
+                if prompt_user:
+                    prompt_pwd = getpass.getpass(f"Senha para {prompt_user}: ")
+                    if prompt_pwd is None:
+                        return ""
+                    # tentar novamente com credencial fornecida
+                    return run_powershell(original_cmd, computer_name=computer_name, timeout=timeout, retries=max(2, retries), initial_backoff=initial_backoff, credential=(prompt_user, prompt_pwd))
+            except Exception:
+                pass
+    return ""
 
 def safe_filename(s):
     # remove caracteres inválidos para nome de arquivo
@@ -1235,42 +1427,66 @@ def get_keyboard_mouse_status(computer_name=None):
         return False, False
 
 def get_printers(computer_name=None):
-        ps = r"""
-        $o = @()
-        try {
-            $pr = Get-CimInstance Win32_Printer -ErrorAction SilentlyContinue
-            foreach ($p in $pr) {
-                $name = $p.Name
-                $pnp = $p.PNPDeviceID
-                $serial = ""
-                $manuf = $p.Manufacturer
-                $model = $p.DriverName
-                if ($pnp) {
-                    try {
-                        $prop = Get-PnpDeviceProperty -InstanceId $pnp -KeyName 'DEVPKEY_Device_SerialNumber' -ErrorAction SilentlyContinue
-                        if ($prop) { $serial = $prop.Data }
-                    } catch {}
-                }
-                if (-not $serial) { $serial = $pnp }
-                $o += [PSCustomObject]@{Name=$name; Serial=$serial; Fabricante=$manuf; Modelo=$model}
+    ps = r"""
+    $o = @()
+    try {
+        $pr = Get-CimInstance Win32_Printer -ErrorAction SilentlyContinue
+        foreach ($p in $pr) {
+            $name = $p.Name
+            $pnp = $p.PNPDeviceID
+            $serial = ""
+            $manuf = $p.Manufacturer
+            $model = $p.DriverName
+            if ($pnp) {
+                try {
+                    $prop = Get-PnpDeviceProperty -InstanceId $pnp -KeyName 'DEVPKEY_Device_SerialNumber' -ErrorAction SilentlyContinue
+                    if ($prop) { $serial = $prop.Data }
+                } catch {}
             }
-        } catch {}
-        $o | ConvertTo-Json -Compress
-        """
-        out = run_powershell(ps, computer_name=computer_name)
-        items = []
-        try:
-                parsed = json.loads(out) if out else []
-                if isinstance(parsed, dict):
-                        parsed = [parsed]
-                for p in parsed:
-                        items.append((p.get('Name'), p.get('Serial'), p.get('Fabricante'), p.get('Modelo')))
-        except Exception:
-                for l in out.splitlines():
-                        if l.strip():
-                                items.append((l, "", "", ""))
-        return items or [("NÃO OBTIDO", "", "", "")]
+            if (-not $serial) { $serial = $pnp }
+            $o += [PSCustomObject]@{Name=$name; Serial=$serial; Fabricante=$manuf; Modelo=$model}
+        }
+    } catch {}
+    $o | ConvertTo-Json -Compress
+    """
+    out = run_powershell(ps, computer_name=computer_name)
+    items = []
+    try:
+        parsed = json.loads(out) if out else []
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        for p in parsed:
+            items.append((p.get('Name'), p.get('Serial'), p.get('Fabricante'), p.get('Modelo')))
+    except Exception:
+        # fallback: se a saída não for JSON, tentar dividir por linhas
+        if out:
+            for l in out.splitlines():
+                if l.strip():
+                    items.append((l, "", "", ""))
+    return items or [("NÃO OBTIDO", "", "", "")]
 
+# --- Wrappers / aliases para compatibilidade com teste/harness ---
+def get_disks_short(computer_name=None):
+    """Alias antigo/curto usado pelo test harness -> retorna drives lógicos compactos."""
+    return get_logical_drives_info(computer_name=computer_name)
+
+def get_monitors(computer_name=None):
+    return get_monitor_infos(computer_name=computer_name)
+
+def get_kbd_mouse(computer_name=None):
+    return get_keyboard_mouse_status(computer_name=computer_name)
+
+def get_nics(computer_name=None):
+    return get_network_adapters_info(computer_name=computer_name)
+
+def get_video(computer_name=None):
+    return get_video_cards_info(computer_name=computer_name)
+
+def get_installed(computer_name=None):
+    return get_installed_software(computer_name=computer_name)
+
+def get_winupdate(computer_name=None):
+    return get_windows_update_status(computer_name=computer_name)
 def is_laptop(computer_name=None):
     # 1) verificar Win32_Battery (se existir, provavelmente notebook)
     out = run_powershell("Get-CimInstance Win32_Battery | ConvertTo-Json -Compress", computer_name=computer_name)
@@ -1312,9 +1528,16 @@ def remove_duplicate_lines(lines):
     
     return filtered_lines
 
-def write_report(path, lines):
+def write_report(path, lines, include_debug=False):
     # Remove duplicidades antes de escrever
     filtered_lines = remove_duplicate_lines(lines)
+    # Sanitizar linhas: remover caracteres de controle como NUL
+    def _sanitize_line(s):
+        if s is None:
+            return ""
+        t = str(s)
+        # remove control chars 0x00-0x1F and 0x7F-0x9F
+        return re.sub(r'[\x00-\x1f\x7f-\x9f]', '', t)
     # Cabeçalho com versão e data
     try:
         import csinfo as _cs
@@ -1324,13 +1547,29 @@ def write_report(path, lines):
     # Novo cabeçalho conforme solicitado:
     # CEOsoftware Sistemas
     # CSInfo - Inventário de hardware e software - v{versão}
+    import getpass
+    user = getpass.getuser()
     header = [
         "CEOsoftware Sistemas",
         f"CSInfo - Inventário de hardware e software - v{ver if ver else 'desconhecida'}",
+        f"Gerado por: {user}",
         "",
     ]
+    # Sanitizar todas as linhas antes de escrever
+    sanitized = [_sanitize_line(l) for l in filtered_lines]
     with open(path, 'w', encoding='utf-8-sig') as f:
-        f.write("\n".join(header + filtered_lines))
+        f.write("\n".join(header + sanitized))
+        # Se solicitado, anexar log de sessão de debug ao final (marcado)
+        if include_debug:
+            try:
+                sess = get_debug_session_log()
+                if sess:
+                    f.write("\n\n=== LOG DE DEBUG (CSINFO) ===\n")
+                    with open(sess, 'r', encoding='utf-8', errors='replace') as lf:
+                        for l in lf:
+                            f.write(_sanitize_line(l))
+            except Exception:
+                pass
 
 def organize_pdf_data(lines, computer_name):
     """Organiza os dados para o PDF conforme a nova estrutura solicitada"""
@@ -1729,7 +1968,58 @@ def write_pdf_report(path, lines, computer_name):
             elif line.startswith("  "):   # 2 espaços - indentação simples
                 story.append(Paragraph(clean_text(line_stripped), indented_style))
             else:  # Sem indentação
+                # Campos a destacar em negrito (label parte antes dos dois-pontos será em <b>)
+                important_prefixes = [
+                    'Nome do computador',
+                    'Tipo',
+                    'Versão do sistema operacional',
+                    'Antivírus',
+                    'Memória RAM total',
+                    'Processador'
+                ]
+
+                # Se a linha contém um ':' vamos separar label/valor e aplicar negrito no label quando aplicável
+                if ':' in line_stripped:
+                    left, right = line_stripped.split(':', 1)
+                    left_clean = clean_text(left).strip()
+                    right_clean = clean_text(right).strip()
+                    # Verificar se o início (sem número) corresponde a algum prefixo importante
+                    left_check = re.sub(r"\s+\d+$", '', left_clean)  # remove sufixos numéricos como 'Antivírus 1'
+                    if any(left_check.startswith(p) for p in important_prefixes):
+                        paragraph_text = f"<b>{left_clean}:</b> {right_clean}"
+                        story.append(Paragraph(paragraph_text, normal_style))
+                        continue
+                else:
+                    # Linhas sem ':' como "Processador" exatas podem aparecer - destacar se começarem com o prefixo
+                    for p in important_prefixes:
+                        if line_stripped.startswith(p) and len(line_stripped) <= len(p) + 10:
+                            # destacar toda a linha
+                            story.append(Paragraph(f"<b>{clean_text(line_stripped)}</b>", normal_style))
+                            break
+                    else:
+                        story.append(Paragraph(clean_text(line_stripped), normal_style))
+                    continue
+
+                # Default: se não entrou nos casos acima, renderizar como normal
                 story.append(Paragraph(clean_text(line_stripped), normal_style))
+        # Se houver log de sessão, anexar como apêndice no PDF
+        try:
+            sess = get_debug_session_log()
+            if sess and os.path.exists(sess):
+                story.append(PageBreak())
+                story.append(Paragraph('<b>LOG DE DEBUG (CSINFO)</b>', section_title_styles.get('INFORMAÇÕES DO SISTEMA', header_style)))
+                # Ler em blocos para evitar problemas de memória
+                try:
+                    with open(sess, 'r', encoding='utf-8', errors='replace') as lf:
+                        for raw in lf:
+                            txt = clean_text(raw.rstrip('\n'))
+                            if txt:
+                                story.append(Paragraph(txt, normal_style))
+                except Exception:
+                    # falhar silenciosamente no anexo do log
+                    pass
+        except Exception:
+            pass
         
         # Gerar PDF com canvas personalizado
         doc.build(story, canvasmaker=NumberedCanvas)
@@ -1802,7 +2092,7 @@ def is_remote_admin(computer_name=None):
     out = run_powershell(ps, computer_name=computer_name)
     return str(out).strip().lower() in ("true", "1")
 
-def main(export_type=None, barra_callback=None, computer_name=None):
+def main(export_type=None, barra_callback=None, computer_name=None, include_debug_on_export=False):
     # --- COLETA DE INFORMAÇÕES AVANÇADAS ---
     network_details = get_network_details(computer_name)
     firewall_status = get_firewall_status(computer_name)
@@ -1901,7 +2191,7 @@ def main(export_type=None, barra_callback=None, computer_name=None):
         spec.loader.exec_module(network_discovery)
         usuario_logado = network_discovery.get_logged_user(machine)
     safe_name = safe_filename(machine)
-    filename = f"info_maquina_{safe_name}.txt"
+    filename = f"Info_maquina_{safe_name}.txt"
     path = os.path.join(os.getcwd(), filename)
 
     lines = []
@@ -2181,6 +2471,19 @@ def main(export_type=None, barra_callback=None, computer_name=None):
     pdf_path = None
     print(f"DEBUG csinfo: export_type={repr(export_type)}, gerar_txt={gerar_txt}, gerar_pdf={gerar_pdf}")
     if export_type in ('txt', 'pdf', 'ambos'):
+        if export_type in ('txt', 'ambos'):
+            try:
+                write_report(path, lines, include_debug=include_debug_on_export)
+                print(f"Arquivo TXT gerado: {path}")
+            except Exception as e:
+                print('Erro ao gerar TXT:', e)
+        if export_type in ('pdf', 'ambos'):
+            try:
+                ok = write_pdf_report(pdf_path, lines, machine)
+                if ok:
+                    print(f"Arquivo PDF gerado: {pdf_path}")
+            except Exception as e:
+                print('Erro ao gerar PDF:', e)
         # Escrita explícita conforme seleção
         if export_type in ('txt', 'ambos'):
             try:

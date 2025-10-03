@@ -1,0 +1,7 @@
+wmi
+python-dotenv
+requests
+psutil
+
+[:platform_system == "Windows"]
+pywin32

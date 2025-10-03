@@ -1670,18 +1670,35 @@ def write_pdf_report(path, lines, computer_name):
             if line_stripped in section_title_styles:
                 story.append(Paragraph(f"<b>{clean_text(line_stripped)}</b>", section_title_styles[line_stripped]))
                 continue
-            
+
             # Pular o rodapé do conteúdo (será adicionado automaticamente)
             if line_stripped == "CSInfo by CEOsoftware":
                 continue
-            
-            # Determinar o estilo baseado na indentação
+
+            # Determinar se a linha é uma das importantes que devem vir em negrito
+            important_prefixes = (
+                "Nome do computador:",
+                "Tipo:",
+                "Versão do sistema operacional:",
+                "Memória RAM total:"
+            )
+            is_important = (
+                any(line_stripped.startswith(p) for p in important_prefixes)
+                or line_stripped.startswith("Antivírus")
+                or line_stripped.startswith("Processador")
+                or line_stripped.startswith(("Cores:", "Cache:", "Fabricante:"))
+            )
+
+            # Determinar o estilo baseado na indentação e aplicar negrito quando necessário
             if line.startswith("    "):  # 4 espaços - indentação dupla
-                story.append(Paragraph(clean_text(line_stripped), double_indented_style))
+                text = f"<b>{clean_text(line_stripped)}</b>" if is_important else clean_text(line_stripped)
+                story.append(Paragraph(text, double_indented_style))
             elif line.startswith("  "):   # 2 espaços - indentação simples
-                story.append(Paragraph(clean_text(line_stripped), indented_style))
+                text = f"<b>{clean_text(line_stripped)}</b>" if is_important else clean_text(line_stripped)
+                story.append(Paragraph(text, indented_style))
             else:  # Sem indentação
-                story.append(Paragraph(clean_text(line_stripped), normal_style))
+                text = f"<b>{clean_text(line_stripped)}</b>" if is_important else clean_text(line_stripped)
+                story.append(Paragraph(text, normal_style))
         
         # Gerar PDF com canvas personalizado
         doc.build(story, canvasmaker=NumberedCanvas)
@@ -1852,7 +1869,7 @@ def main(export_type=None, barra_callback=None, computer_name=None):
         spec.loader.exec_module(network_discovery)
         usuario_logado = network_discovery.get_logged_user(machine)
     safe_name = safe_filename(machine)
-    filename = f"info_maquina_{safe_name}.txt"
+    filename = f"Info_maquina_{safe_name}.txt"
     path = os.path.join(os.getcwd(), filename)
 
     lines = []
