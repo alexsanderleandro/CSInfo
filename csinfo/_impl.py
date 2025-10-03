@@ -2092,7 +2092,7 @@ def is_remote_admin(computer_name=None):
     out = run_powershell(ps, computer_name=computer_name)
     return str(out).strip().lower() in ("true", "1")
 
-def main(export_type=None, barra_callback=None, computer_name=None, include_debug_on_export=False):
+def main(export_type=None, barra_callback=None, computer_name=None, include_debug_on_export=False, machine_alias=None):
     # --- COLETA DE INFORMAÇÕES AVANÇADAS ---
     network_details = get_network_details(computer_name)
     firewall_status = get_firewall_status(computer_name)
@@ -2191,7 +2191,12 @@ def main(export_type=None, barra_callback=None, computer_name=None, include_debu
         spec.loader.exec_module(network_discovery)
         usuario_logado = network_discovery.get_logged_user(machine)
     safe_name = safe_filename(machine)
-    filename = f"Info_maquina_{safe_name}.txt"
+    # Se houver apelido (machine_alias), use o padrão Info_maquina_<apelido>_<nomemaquina>.txt
+    if machine_alias and str(machine_alias).strip():
+        safe_alias = safe_filename(machine_alias)
+        filename = f"Info_maquina_{safe_alias}_{safe_name}.txt"
+    else:
+        filename = f"Info_maquina_{safe_name}.txt"
     path = os.path.join(os.getcwd(), filename)
 
     lines = []

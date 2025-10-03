@@ -7,6 +7,7 @@ import csinfo
 from csinfo import main as csinfo_main
 import importlib.util, sys
 import subprocess
+import tkinter.font as tkfont
 
 
 def resource_path(rel_path: str) -> str:
@@ -62,6 +63,51 @@ def estilo_botoes():
                    padding=4)
     style.map('Custom.TRadiobutton',
               indicatorcolor=[('selected', '#1976D2'), ('active', '#1565C0')])
+
+
+# Simples tooltip para widgets (mostrar Toplevel ao passar o mouse)
+class Tooltip:
+    def __init__(self, widget, text, delay=400):
+        self.widget = widget
+        self.text = text
+        self.delay = delay
+        self._id = None
+        self._tip = None
+        widget.bind('<Enter>', self._schedule)
+        widget.bind('<Leave>', self._hide)
+        widget.bind('<ButtonPress>', self._hide)
+
+    def _schedule(self, event=None):
+        self._unschedule()
+        self._id = self.widget.after(self.delay, self._show)
+
+    def _unschedule(self):
+        if self._id:
+            try:
+                self.widget.after_cancel(self._id)
+            except Exception:
+                pass
+            self._id = None
+
+    def _show(self):
+        if self._tip or not self.widget.winfo_ismapped():
+            return
+        x = self.widget.winfo_rootx() + 20
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+        self._tip = tk.Toplevel(self.widget)
+        self._tip.wm_overrideredirect(True)
+        self._tip.wm_geometry(f'+{x}+{y}')
+        lbl = tk.Label(self._tip, text=self.text, justify='left', background='#ffffe0', relief='solid', borderwidth=1, font=('Segoe UI', 9))
+        lbl.pack(ipadx=6, ipady=3)
+
+    def _hide(self, event=None):
+        self._unschedule()
+        if self._tip:
+            try:
+                self._tip.destroy()
+            except Exception:
+                pass
+            self._tip = None
 
 
 # --------- Classe principal adaptada ---------
@@ -228,18 +274,100 @@ class CSInfoApp(tk.Tk):
                 self.machine_var.set("")  # Garante que a variável não fique com o placeholder
         self.machine_entry.bind("<FocusIn>", on_focus_in)
         self.machine_entry.bind("<FocusOut>", on_focus_out)
+        # Campo para apelido (alias)
+        label_alias = tk.Label(frame_entrada, text="Apelido:", font=("Segoe UI", 10, 'normal'), fg='#333', bg='#f4f6f9')
+        label_alias.grid(row=1, column=0, padx=(0, 8), sticky='e')
+        self.alias_var = tk.StringVar()
+        self.alias_entry = tk.Entry(frame_entrada, textvariable=self.alias_var, font=("Segoe UI", 10), width=24, relief='solid', justify='center')
+        self.alias_entry.grid(row=1, column=1, sticky='w')
+        # Forçar apelido em caixa alta e limitar tamanho (comportamento consistente ao campo máquina)
+        def alias_maiusculo(*args):
+            valor = self.alias_var.get() or ''
+            valor_maiusculo = valor.upper()
+            if len(valor_maiusculo) > 40:
+                valor_maiusculo = valor_maiusculo[:40]
+            if valor != valor_maiusculo:
+                self.alias_var.set(valor_maiusculo)
+        self.alias_var.trace_add('write', alias_maiusculo)
+        # Layout principal: container com duas colunas lado a lado (resultados | histórico)
+        self.main_content = tk.Frame(self, bg='#f4f6f9')
+        self.main_content.pack(fill='both', expand=True, padx=10, pady=(6, 6))
 
-    # Removido label 'Gerado por' do formulário — fica apenas nos relatórios
-    # ...existing code...
+        # Left frame: área de resultados (vai conter frame_result)
+        self.left_frame = tk.Frame(self.main_content, bg='#f4f6f9')
+        self.left_frame.pack(side='left', fill='both', expand=True)
 
-    # ...o botão Iniciar agora fica dentro do frame_entrada ao lado do input...
+        # Right frame: histórico de máquinas (mantém largura fixa)
+        self.right_frame = tk.Frame(self.main_content, bg='#f4f6f9', width=260)
+        self.right_frame.pack(side='right', fill='y', padx=(8, 0))
+        self.right_frame.pack_propagate(False)  # manter largura fixa
 
-        # Área de resultados
-        frame_result = tk.Frame(self, bg='#f4f6f9')
-        frame_result.pack(pady=(5, 10))
-        self.info_text = ScrolledText(frame_result, width=110, height=20, font=('Consolas', 9),
+        tk.Label(self.right_frame, text="Máquinas salvas:", bg='#f4f6f9', font=("Segoe UI", 10)).pack(anchor='w', padx=6, pady=(6, 0))
+        self.machines_listbox = tk.Listbox(self.right_frame, font=("Segoe UI", 9), activestyle='dotbox')
+        self.machines_listbox.pack(fill='both', expand=True, pady=(6, 6), padx=6)
+        # ligar seleção simples para habilitar Remover/Editar e bloquear o campo Apelido
+        self.machines_listbox.bind('<<ListboxSelect>>', self.on_history_select)
+        self.machines_listbox.bind('<Double-Button-1>', self.on_history_double_click)
+
+        btns_hist = tk.Frame(self.right_frame, bg='#f4f6f9')
+        btns_hist.pack(fill='x', padx=6, pady=(0, 6))
+        self.btn_save = ttk.Button(btns_hist, text='Salvar', command=self.save_machine)
+        self.btn_save.pack(side='left', padx=4, pady=4)
+        self.btn_edit = ttk.Button(btns_hist, text='Editar', command=self.edit_selected_machine)
+        self.btn_edit.pack(side='left', padx=4, pady=4)
+        self.btn_remove = ttk.Button(btns_hist, text='Remover', command=self.remove_selected_machine)
+        self.btn_remove.pack(side='left', padx=4, pady=4)
+        # Iniciar com Remover/Editar desabilitados até seleção
+        try:
+            self.btn_remove.config(state=tk.DISABLED)
+            self.btn_edit.config(state=tk.DISABLED)
+        except Exception:
+            pass
+        self.btn_open_hist = ttk.Button(btns_hist, text='Abrir', command=self.open_history_folder)
+        self.btn_open_hist.pack(side='left', padx=4, pady=4)
+
+        # Arquivo de histórico JSON (migrado para pasta do usuário)
+        try:
+            if os.name == 'nt':
+                base_dir = os.getenv('APPDATA') or os.path.expanduser('~')
+                hist_dir = os.path.join(base_dir, 'CSInfo')
+            else:
+                hist_dir = os.path.join(os.path.expanduser('~'), '.csinfo')
+            os.makedirs(hist_dir, exist_ok=True)
+            self.history_path = os.path.join(hist_dir, 'machines_history.json')
+            # migrar histórico antigo do diretório do projeto, se existir e não houver no novo local
+            legacy_path = os.path.join(os.getcwd(), 'machines_history.json')
+            if os.path.exists(legacy_path) and not os.path.exists(self.history_path):
+                try:
+                    import shutil
+                    shutil.copy2(legacy_path, self.history_path)
+                except Exception:
+                    pass
+        except Exception:
+            # fallback para o diretório do projeto
+            self.history_path = os.path.join(os.getcwd(), 'machines_history.json')
+
+        self.machines_history = []
+        self.editing_index = None
+        self.load_history()
+
+        # Limite do histórico (número máximo de entradas)
+        self.MAX_HISTORY = 100
+
+        # Label acima do campo de informações processadas
+        self.label_info = tk.Label(self.left_frame, text="Informações processadas:", font=("Segoe UI", 10), fg='#333', bg='#f4f6f9')
+        self.label_info.pack(anchor='w', padx=6, pady=(6, 0))
+
+        # Área de resultados (dentro do left_frame para manter altura simétrica)
+        self.frame_result = tk.Frame(self.left_frame, bg='#f4f6f9')
+        # aumentar o espaço inicial do frame_result para dar mais área ao ScrolledText
+        self.frame_result.pack(fill='both', expand=True, pady=(5, 6))
+        # ScrolledText preenche o frame para manter mesma altura da lista de histórico
+        # aumentamos 'height' para deslocar os controles para baixo
+        # aumentar para 24 linhas (mais área, mas deixando espaço para os controles abaixo)
+        self.info_text = ScrolledText(self.frame_result, width=1, height=24, font=('Consolas', 9),
                                       bg='white', fg='#222', relief='solid', borderwidth=1)
-        self.info_text.pack()
+        self.info_text.pack(fill='both', expand=True)
         self.info_text.config(state=tk.DISABLED)  # Sempre inicia como somente leitura
         # Remove qualquer binding que permita digitação
         self.info_text.bind('<Key>', lambda e: 'break')
@@ -255,30 +383,56 @@ class CSInfoApp(tk.Tk):
         self.progress_percent_label = tk.Label(self, text="", font=('Segoe UI', 9), fg='#333', bg='#f4f6f9')
         self.progress_percent_label.pack()
 
-        # Rodapé: Exportação
-        frame_export = tk.Frame(self, bg='#f4f6f9')
-        frame_export.pack(pady=(15, 5))
-        label_export = tk.Label(frame_export, text="Exportar resultado:", font=('Segoe UI', 10, 'normal'), fg='#333', bg='#f4f6f9')
+        # Rodapé: Exportação (colocado dentro do left_frame para manter alinhamento)
+        self.frame_export = tk.Frame(self.left_frame, bg='#f4f6f9')
+        self.frame_export.pack(pady=(8, 5), fill='x')
+        label_export = tk.Label(self.frame_export, text="Exportar resultado:", font=('Segoe UI', 10, 'normal'), fg='#333', bg='#f4f6f9')
         label_export.grid(row=0, column=0, padx=(0, 8))
         self.export_var = tk.StringVar(value='txt')
-        self.radio_txt = tk.Radiobutton(frame_export, text='TXT', variable=self.export_var, value='txt', font=('Segoe UI', 10), bg='#f4f6f9', activebackground='#e3e6ea', selectcolor='white', highlightthickness=0)
-        self.radio_pdf = tk.Radiobutton(frame_export, text='PDF', variable=self.export_var, value='pdf', font=('Segoe UI', 10), bg='#f4f6f9', activebackground='#e3e6ea', selectcolor='white', highlightthickness=0)
-        self.radio_ambos = tk.Radiobutton(frame_export, text='Ambos', variable=self.export_var, value='ambos', font=('Segoe UI', 10), bg='#f4f6f9', activebackground='#e3e6ea', selectcolor='white', highlightthickness=0)
+        self.radio_txt = tk.Radiobutton(self.frame_export, text='TXT', variable=self.export_var, value='txt', font=('Segoe UI', 10), bg='#f4f6f9', activebackground='#e3e6ea', selectcolor='white', highlightthickness=0)
+        self.radio_pdf = tk.Radiobutton(self.frame_export, text='PDF', variable=self.export_var, value='pdf', font=('Segoe UI', 10), bg='#f4f6f9', activebackground='#e3e6ea', selectcolor='white', highlightthickness=0)
+        self.radio_ambos = tk.Radiobutton(self.frame_export, text='Ambos', variable=self.export_var, value='ambos', font=('Segoe UI', 10), bg='#f4f6f9', activebackground='#e3e6ea', selectcolor='white', highlightthickness=0)
         self.radio_txt.grid(row=0, column=1, padx=5)
         self.radio_pdf.grid(row=0, column=2, padx=5)
         self.radio_ambos.grid(row=0, column=3, padx=5)
-        # Checkbox para incluir diagnóstico (log de debug)
-        self.include_debug_var = tk.BooleanVar(value=False)
-        self.chk_debug = tk.Checkbutton(frame_export, text='Incluir diagnóstico', variable=self.include_debug_var, bg='#f4f6f9')
-        self.chk_debug.grid(row=0, column=4, padx=(12,0))
+    # Nota: Checkbox 'Incluir diagnóstico' removido (opção não exibida no UI)
 
-        # Botões Exportar e Sair
-        frame_botoes = tk.Frame(self, bg='#f4f6f9')
-        frame_botoes.pack(pady=(10, 20))
-        self.export_btn = ttk.Button(frame_botoes, text="💾 Exportar", style='Export.TButton', command=self.exportar)
+        # Botões Exportar e Sair (dentro do left_frame)
+        self.frame_botoes = tk.Frame(self.left_frame, bg='#f4f6f9')
+        self.frame_botoes.pack(pady=(6, 12), fill='x')
+        self.export_btn = ttk.Button(self.frame_botoes, text="💾 Exportar", style='Export.TButton', command=self.exportar)
         self.export_btn.grid(row=0, column=0, padx=10)
-        self.exit_btn = ttk.Button(frame_botoes, text="✖ Sair", style='Exit.TButton', command=self.quit)
+        self.exit_btn = ttk.Button(self.frame_botoes, text="✖ Sair", style='Exit.TButton', command=self.quit)
         self.exit_btn.grid(row=0, column=1, padx=10)
+
+        # Ajusta a altura do Listbox em linhas para alinhar exatamente com a altura do ScrolledText
+        def adjust_listbox_height():
+            try:
+                # Garantir que a geometria esteja atualizada
+                self.update_idletasks()
+                # Usar a fonte do listbox para calcular altura de linha
+                lb_font = tkfont.Font(font=self.machines_listbox.cget('font'))
+                line_px = lb_font.metrics('linespace') or 12
+                # Altura em pixels do widget de texto (conteúdo visível)
+                text_h = self.info_text.winfo_height()
+                if not text_h or text_h < line_px:
+                    return
+                # Calcular número de linhas para o listbox
+                lines = max(3, int(text_h / line_px))
+                # Aplicar sem quebrar se já estiver igual
+                try:
+                    current_h = int(self.machines_listbox.cget('height'))
+                except Exception:
+                    current_h = None
+                if current_h != lines:
+                    self.machines_listbox.config(height=lines)
+            except Exception:
+                pass
+
+        # Chamar após pequenas mudanças de layout e quando o frame de resultado for redimensionado
+        self.frame_result.bind('<Configure>', lambda e: self.after(50, adjust_listbox_height))
+        # Agendamento inicial para ajustar logo após a criação da janela
+        self.after(200, adjust_listbox_height)
 
         # Inicialmente, desabilita botões de exportação
         self.export_btn.config(state=tk.DISABLED)
@@ -286,12 +440,45 @@ class CSInfoApp(tk.Tk):
         self.radio_pdf.config(state=tk.DISABLED)
         self.radio_ambos.config(state=tk.DISABLED)
 
+        # Tooltips para controles principais
+        try:
+            Tooltip(self.start_btn, 'Iniciar coleta de informações da máquina (local ou remota)')
+            Tooltip(self.creds_btn, 'Definir credenciais remotas no formato DOMAIN\\user')
+            Tooltip(self.alias_entry, 'Apelido usado para salvar/exportar o relatório (obrigatório para salvar no histórico)')
+            Tooltip(self.machines_listbox, 'Lista de máquinas salvas. Duplo clique inicia a análise na máquina selecionada')
+            Tooltip(self.btn_save, 'Salvar a máquina atual no histórico (é necessário informar um apelido)')
+            Tooltip(self.btn_edit, 'Editar a entrada selecionada no histórico')
+            Tooltip(self.btn_remove, 'Remover a entrada selecionada do histórico')
+            Tooltip(self.btn_open_hist, 'Abrir a pasta que contém o arquivo de histórico (machines_history.json)')
+            Tooltip(self.export_btn, 'Exportar relatório (TXT/PDF) para disco')
+            Tooltip(self.exit_btn, 'Fechar o aplicativo')
+            Tooltip(self.radio_txt, 'Exportar somente em formato TXT')
+            Tooltip(self.radio_pdf, 'Exportar somente em formato PDF')
+            Tooltip(self.radio_ambos, 'Exportar em ambos os formatos (TXT e PDF)')
+            Tooltip(self.chk_debug, 'Incluir informações de diagnóstico adicionais no arquivo TXT')
+        except Exception:
+            pass
+
+        # Sincronizar dinamicamente a altura da listbox com a área de resultados
+        def sync_history_height(event=None):
+            try:
+                h = self.frame_result.winfo_height()
+                if h and h > 10:
+                    extra = 80  # espaço para label e botões inferior
+                    self.right_frame.config(height=h + extra)
+                    self.right_frame.pack_propagate(False)
+            except Exception:
+                pass
+
+        self.frame_result.bind('<Configure>', sync_history_height)
+        self.bind('<Configure>', sync_history_height)
+
         # Rodapé centralizado com versão
         # Rodapé sem versão do app (apenas o nome da empresa)
         rodape_text = "CEOsoftware Sistemas"
         # Rodapé centralizado
         rodape = tk.Label(self, text=rodape_text, font=("Segoe UI", 8), fg="#666", bg="#f4f6f9")
-        rodape.pack(side=tk.BOTTOM, pady=(0, 6))
+        rodape.pack(side=tk.BOTTOM, pady=(0, 6), fill='x')
         rodape.configure(anchor="center", justify="center")
 
     def show_about(self):
@@ -398,7 +585,10 @@ class CSInfoApp(tk.Tk):
             elif valor_input.upper() == platform.node().upper():
                 machine_name = None
             else:
-                machine_name = valor_input
+                machine_name = valor_input.strip()
+            # pegar apelido se informado
+            alias = self.alias_var.get().strip() or None
+            print('DEBUG: machine_name:', machine_name, 'alias:', alias)
             print('DEBUG: machine_name:', machine_name)
             if machine_name:
                 self.progress_label.config(text=f"Acessando a máquina {machine_name}...", fg="black", font=("Helvetica", 10, "bold"))
@@ -440,8 +630,14 @@ class CSInfoApp(tk.Tk):
             print('DEBUG: Chamando csinfo_main')
             # Se o usuário definiu credenciais via GUI, elas já foram aplicadas via csinfo.set_default_credential
             # Apenas coleta os dados na análise; não gerar arquivos automaticamente
-            include_debug = bool(self.include_debug_var.get())
-            resultado = csinfo_main(export_type=None, barra_callback=gui_callback, computer_name=machine_name, include_debug_on_export=include_debug)
+            # A opção 'Incluir diagnóstico' foi removida da UI; não passamos esse flag
+            resultado = csinfo_main(export_type=None, barra_callback=gui_callback, computer_name=machine_name, machine_alias=alias)
+            # garantir que o alias seja preservado para exportação posterior
+            try:
+                if isinstance(resultado, dict):
+                    resultado['alias'] = alias
+            except Exception:
+                pass
             # Armazena resultado da análise para possível exportação posterior
             self.last_result = resultado
             print('DEBUG: Resultado csinfo_main:', resultado)
@@ -531,11 +727,15 @@ class CSInfoApp(tk.Tk):
                 if (not machine_name and (not last_machine or last_machine.lower() == csinfo.get_machine_name(None).lower())) or (last_machine and machine_name and last_machine.lower() == machine_name.lower()):
                     lines = self.last_result.get('lines') or []
                     safe_name = csinfo.safe_filename(last_machine or csinfo.get_machine_name(None))
-                    base_path = os.path.join(os.getcwd(), f"Info_maquina_{safe_name}.txt")
+                    # Se o último resultado tiver um alias, respeitar o padrão Info_maquina_<alias>_<nomemaquina>.txt
+                    last_alias = self.last_result.get('alias') if isinstance(self.last_result, dict) else None
+                    if last_alias:
+                        base_path = os.path.join(os.getcwd(), f"Info_maquina_{csinfo.safe_filename(last_alias)}_{safe_name}.txt")
+                    else:
+                        base_path = os.path.join(os.getcwd(), f"Info_maquina_{safe_name}.txt")
                     if tipo in ('txt', 'ambos'):
                         try:
-                            include_debug_reuse = bool(self.include_debug_var.get())
-                            csinfo.write_report(base_path, lines, include_debug=include_debug_reuse)
+                            csinfo.write_report(base_path, lines)
                             msg.append(f"Arquivo TXT exportado: {base_path}")
                             reused = True
                         except Exception as e:
@@ -552,7 +752,8 @@ class CSInfoApp(tk.Tk):
 
             # Se não reutilizamos (nenhum resultado disponível ou máquina diferente), executar export padrão
             if not reused:
-                resultado = csinfo_main(export_type=tipo, barra_callback=None, computer_name=machine_name)
+                alias_for_call = self.alias_var.get().strip() or None
+                resultado = csinfo_main(export_type=tipo, barra_callback=None, computer_name=machine_name, machine_alias=alias_for_call)
                 print('DEBUG: Resultado da exportação (execução):', resultado)
                 if resultado.get('txt'):
                     msg.append(f"Arquivo TXT exportado: {resultado['txt']}")
@@ -607,6 +808,218 @@ class CSInfoApp(tk.Tk):
             if nome_maquina and nome_maquina.lower() != 'carregando...' and nome_maquina.lower() != 'nenhuma máquina encontrada na rede.' and not nome_maquina.lower().startswith('erro'):
                 self.machine_var.set(nome_maquina)
                 self.machine_entry.config(fg='#222', font=('Segoe UI', 10), justify='center')
+
+    # --- Histórico de máquinas (JSON) ---
+    def load_history(self):
+        try:
+            if os.path.exists(self.history_path):
+                with open(self.history_path, 'r', encoding='utf-8') as f:
+                    data = f.read().strip()
+                    if not data:
+                        self.machines_history = []
+                    else:
+                        import json
+                        self.machines_history = json.loads(data)
+            else:
+                self.machines_history = []
+        except Exception:
+            self.machines_history = []
+        # ordenar por alias (case-insensitive) e truncar ao limite
+        try:
+            self.machines_history = sorted(self.machines_history, key=lambda x: (x.get('alias') or '').lower())
+            if hasattr(self, 'MAX_HISTORY') and isinstance(self.MAX_HISTORY, int):
+                self.machines_history = self.machines_history[:self.MAX_HISTORY]
+        except Exception:
+            pass
+
+        # popular listbox
+        try:
+            self.machines_listbox.delete(0, tk.END)
+            for item in self.machines_history:
+                alias = item.get('alias')
+                name = item.get('name')
+                display = f"{name} - {alias}" if alias else name
+                self.machines_listbox.insert(tk.END, display)
+        except Exception:
+            pass
+        # Após carregar histórico, garantir estado dos controles
+        try:
+            self.btn_remove.config(state=tk.DISABLED)
+            self.btn_edit.config(state=tk.DISABLED)
+            # deixar apelido desabilitado até o usuário clicar em Editar
+            self.alias_entry.config(state='disabled')
+        except Exception:
+            pass
+
+    def save_machine(self):
+        # salvar o par {name, alias} requer alias não vazio
+        name = self.get_computer_name_input() or csinfo.get_machine_name(None)
+        raw_alias = self.alias_var.get().strip()
+        if not raw_alias:
+            messagebox.showwarning("Apelido obrigatório", "Para salvar uma máquina no histórico, informe um apelido.")
+            return
+        # sanitizar apelido para armazenagem e para uso em filename
+        safe_alias = csinfo.safe_filename(raw_alias)
+        if safe_alias != raw_alias:
+            messagebox.showinfo("Apelido alterado", f"O apelido informado foi ajustado para um formato seguro: {safe_alias}")
+        entry = {'name': name, 'alias': safe_alias}
+        # Se estamos editando um item, substituir
+        if self.editing_index is not None and 0 <= self.editing_index < len(self.machines_history):
+            # evitar duplicar outro alias
+            self.machines_history = [m for m in self.machines_history if m.get('alias') != safe_alias or m is self.machines_history[self.editing_index]]
+            self.machines_history[self.editing_index] = entry
+            self.editing_index = None
+        else:
+            # evitar duplicatas pelo alias
+            self.machines_history = [m for m in self.machines_history if m.get('alias') != safe_alias]
+            self.machines_history.insert(0, entry)
+
+        try:
+            import json
+            with open(self.history_path, 'w', encoding='utf-8') as f:
+                # garantir ordenação antes de salvar e truncamento
+                try:
+                    self.machines_history = sorted(self.machines_history, key=lambda x: (x.get('alias') or '').lower())
+                    if hasattr(self, 'MAX_HISTORY') and isinstance(self.MAX_HISTORY, int):
+                        self.machines_history = self.machines_history[:self.MAX_HISTORY]
+                except Exception:
+                    pass
+                json.dump(self.machines_history, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            messagebox.showerror("Erro", f"Não foi possível salvar o histórico: {e}")
+            return
+        self.load_history()
+        # Após salvar, bloquear o campo apelido novamente e desabilitar editar/remover
+        try:
+            self.alias_entry.config(state='disabled')
+            self.btn_edit.config(state=tk.DISABLED)
+            self.btn_remove.config(state=tk.DISABLED)
+        except Exception:
+            pass
+
+    def remove_selected_machine(self):
+        try:
+            sel = self.machines_listbox.curselection()
+            if not sel:
+                return
+            idx = sel[0]
+            item = self.machines_history[idx]
+            alias = item.get('alias')
+            if messagebox.askyesno("Confirmar remoção", f"Deseja remover '{alias}' do histórico? Esta ação não pode ser desfeita."):
+                self.machines_history = [m for m in self.machines_history if m.get('alias') != alias]
+                import json
+                with open(self.history_path, 'w', encoding='utf-8') as f:
+                    json.dump(self.machines_history, f, ensure_ascii=False, indent=2)
+                self.load_history()
+                # Depois de remover, bloquear apelido e desabilitar botões
+                try:
+                    self.alias_entry.config(state='disabled')
+                    self.btn_edit.config(state=tk.DISABLED)
+                    self.btn_remove.config(state=tk.DISABLED)
+                except Exception:
+                    pass
+        except Exception as e:
+            messagebox.showerror("Erro", f"Não foi possível remover: {e}")
+
+    def on_history_double_click(self, event):
+        try:
+            sel = self.machines_listbox.curselection()
+            if not sel:
+                return
+            idx = sel[0]
+            item = self.machines_history[idx]
+            name = item.get('name')
+            alias = item.get('alias')
+            if name:
+                self.machine_var.set(name)
+                self.machine_entry.config(fg='#222', font=('Segoe UI', 10), justify='center')
+            if alias:
+                self.alias_var.set(alias)
+            # manter apelido bloqueado (somente leitura) após selecionar
+            try:
+                self.alias_entry.config(state='disabled')
+            except Exception:
+                pass
+            # iniciar processamento automaticamente (mesmo comportamento do botão Iniciar)
+            self.start_process()
+        except Exception:
+            pass
+
+    def edit_selected_machine(self):
+        try:
+            sel = self.machines_listbox.curselection()
+            if not sel:
+                messagebox.showwarning("Selecionar", "Selecione uma máquina na lista para editar.")
+                return
+            idx = sel[0]
+            item = self.machines_history[idx]
+            name = item.get('name')
+            alias = item.get('alias')
+            # preencher campos e colocar em modo edição
+            if name:
+                self.machine_var.set(name)
+                self.machine_entry.config(fg='#222', font=('Segoe UI', 10), justify='center')
+            if alias:
+                self.alias_var.set(alias)
+            self.editing_index = idx
+            # permitir edição do apelido enquanto estiver em modo edição
+            try:
+                self.alias_entry.config(state='normal')
+                self.alias_entry.focus_set()
+            except Exception:
+                pass
+        except Exception as e:
+            messagebox.showerror("Erro", f"Não foi possível iniciar edição: {e}")
+
+    def open_history_folder(self):
+        try:
+            pasta = os.path.dirname(self.history_path)
+            if not os.path.exists(pasta):
+                messagebox.showwarning("Aviso", "Pasta de histórico não encontrada.")
+                return
+            # abrir no explorer no Windows, no caso de outros sistemas tentar abrir com o método padrão
+            try:
+                if os.name == 'nt':
+                    subprocess.Popen(['explorer', pasta])
+                else:
+                    # tentar abrir com xdg-open, open (mac) ou fallback para listar
+                    if shutil.which('xdg-open'):
+                        subprocess.Popen(['xdg-open', pasta])
+                    elif shutil.which('open'):
+                        subprocess.Popen(['open', pasta])
+                    else:
+                        messagebox.showinfo('Pasta', f"Pasta do histórico: {pasta}")
+            except Exception:
+                messagebox.showinfo('Pasta', f"Pasta do histórico: {pasta}")
+        except Exception as e:
+            messagebox.showerror('Erro', f"Não foi possível abrir a pasta: {e}")
+
+    def on_history_select(self, event):
+        """Handler chamado quando um item do histórico é selecionado.
+        Habilita os botões Editar/Remover e mantém o campo Apelido desabilitado até Editar ser clicado.
+        """
+        try:
+            sel = self.machines_listbox.curselection()
+            if not sel:
+                try:
+                    self.btn_remove.config(state=tk.DISABLED)
+                    self.btn_edit.config(state=tk.DISABLED)
+                except Exception:
+                    pass
+                return
+            # item selecionado
+            try:
+                self.btn_remove.config(state=tk.NORMAL)
+                self.btn_edit.config(state=tk.NORMAL)
+            except Exception:
+                pass
+            # garantir apelido em modo somente leitura até Editar
+            try:
+                self.alias_entry.config(state='disabled')
+            except Exception:
+                pass
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     app = CSInfoApp()
