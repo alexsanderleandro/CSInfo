@@ -173,12 +173,12 @@ class CSInfoGUI(tk.Tk):
         self.export_var = tk.StringVar(value='pdf')
         self.export_frame = ttk.Frame(left)
         self.export_frame.pack(fill='x')
-        r1 = ttk.Radiobutton(self.export_frame, text='PDF', value='pdf', variable=self.export_var, command=self._update_export_button_state)
-        r1.pack(side='left', padx=(0, 6))
-        r2 = ttk.Radiobutton(self.export_frame, text='TXT', value='txt', variable=self.export_var, command=self._update_export_button_state)
-        r2.pack(side='left', padx=(0, 6))
-        r3 = ttk.Radiobutton(self.export_frame, text='Ambos', value='ambos', variable=self.export_var, command=self._update_export_button_state)
-        r3.pack(side='left')
+        self.rb_pdf = ttk.Radiobutton(self.export_frame, text='PDF', value='pdf', variable=self.export_var, command=self._update_export_button_state)
+        self.rb_pdf.pack(side='left', padx=(0, 6))
+        self.rb_txt = ttk.Radiobutton(self.export_frame, text='TXT', value='txt', variable=self.export_var, command=self._update_export_button_state)
+        self.rb_txt.pack(side='left', padx=(0, 6))
+        self.rb_both = ttk.Radiobutton(self.export_frame, text='Ambos', value='ambos', variable=self.export_var, command=self._update_export_button_state)
+        self.rb_both.pack(side='left')
 
         self.btn_export = ttk.Button(left, text='Exportar', command=self._do_export, state='disabled')
         self.btn_export.pack(fill='x', pady=(8, 0))
@@ -214,6 +214,8 @@ class CSInfoGUI(tk.Tk):
             self.tree.tag_configure('offline', background='#ffb3b3')
         except Exception:
             pass
+        # ao selecionar (single-click) limpar saída e desabilitar export até nova coleta
+        self.tree.bind('<<TreeviewSelect>>', lambda e: self._on_tree_selection_change())
         self.tree.bind('<Double-1>', lambda e: self._load_selection_into_form())
 
         right = ttk.Frame(frm)
@@ -297,6 +299,15 @@ class CSInfoGUI(tk.Tk):
             self.machine_list.append({'name': name, 'alias': alias, 'online': False})
         self.save_machine_list()
         try:
+            # limpar saída e manter export desabilitado até que uma nova coleta ocorra
+            try:
+                self.clear_output()
+            except Exception:
+                pass
+            try:
+                self._update_export_button_state()
+            except Exception:
+                pass
             threading.Thread(target=self._ping_single_and_queue, args=(name,), daemon=True).start()
         except Exception:
             pass
@@ -683,12 +694,29 @@ class CSInfoGUI(tk.Tk):
 
     def _update_export_button_state(self):
         fmt = self.export_var.get() if getattr(self, 'export_var', None) is not None else 'pdf'
-        enabled = (fmt != 'nenhum' and bool(self.last_lines) and not self._processing)
+        enabled = (bool(self.last_lines) and not self._processing)
         try:
             if enabled:
                 self.btn_export.configure(state='normal')
             else:
                 self.btn_export.configure(state='disabled')
+        except Exception:
+            pass
+        # habilitar/desabilitar radiobuttons conforme disponibilidade
+        try:
+            state = 'normal' if enabled else 'disabled'
+            try:
+                self.rb_pdf.configure(state=state)
+            except Exception:
+                pass
+            try:
+                self.rb_txt.configure(state=state)
+            except Exception:
+                pass
+            try:
+                self.rb_both.configure(state=state)
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -771,12 +799,28 @@ class CSInfoGUI(tk.Tk):
         vals = self.tree.item(sel[0], 'values')
         if vals:
             try:
+                # limpar saída (resultados de coleta anteriores) e desabilitar export
+                try:
+                    self.clear_output()
+                except Exception:
+                    pass
                 self.ent_computer.delete(0, tk.END)
                 self.ent_computer.insert(0, vals[0])
                 self.ent_alias.delete(0, tk.END)
                 self.ent_alias.insert(0, vals[1] if len(vals) > 1 else '')
             except Exception:
                 pass
+
+    def _on_tree_selection_change(self):
+        # chamado quando a seleção muda: limpar saída e desabilitar export
+        try:
+            self.clear_output()
+            try:
+                self._update_export_button_state()
+            except Exception:
+                pass
+        except Exception:
+            pass
 
 
 def main():
