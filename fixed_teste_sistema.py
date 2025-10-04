@@ -15,7 +15,17 @@ class Cores:
     FIM = '\033[0m'
 
 def formatar_tamanho(tamanho_bytes):
-    # ... (rest of the file remains the same until line 665)
+    """Formata um número de bytes para uma string legível (KB, MB, GB, ...)."""
+    try:
+        n = float(tamanho_bytes)
+    except Exception:
+        return str(tamanho_bytes)
+    for unit in ['bytes', 'KB', 'MB', 'GB', 'TB', 'PB']:
+        if n < 1024.0 or unit == 'PB':
+            if unit == 'bytes':
+                return f"{int(n)} {unit}"
+            return f"{n:.2f} {unit}"
+        n /= 1024.0
 
 def get_antivirus_info():
     """Obtém informações sobre o antivírus instalado"""

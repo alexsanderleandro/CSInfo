@@ -1,18 +1,14 @@
+r"""CSInfo GUI
 
-"""csinfo GUI
+Front-end Tkinter limpo e consolidado para o backend `csinfo`.
 
-Interface Tkinter que chama o backend `csinfo.main(...)` em background e recebe
-eventos via callback para atualizar progresso e saída textual.
-
-Funcionalidades principais:
-- Chama o backend real (se disponível) e streama linhas/progressos para a UI.
-- Bloqueia controles e impede fechar a janela enquanto houver processamento.
-- Persiste lista de máquinas em %APPDATA%\\CSInfo\\machines_history.json.
-- Faz ping nas máquinas para marcar ONLINE/OFFLINE e colore as linhas.
-- Normaliza entradas "Máquina" e "Apelido" para MAIÚSCULAS e centraliza os campos.
-- Campos de credenciais (usuário/senha) são passados ao backend via helpers.
-- Botão "Exportar" habilitado apenas após coleta concluída e formato selecionado.
-
+Funcionalidades:
+- Chama csinfo.main(...) com barra_callback para streaming de linhas/progresso
+- Persiste máquinas em %APPDATA%\CSInfo\machines_history.json
+- Ping para status ONLINE/OFFLINE
+- Campos de credenciais (usuário/senha)
+- Exporta TXT/PDF com padrão Info_maquina_<apelido>_<nomemaquina>
+- UI bloqueada enquanto processamento está em andamento
 """
 
 import json
@@ -22,7 +18,7 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from tkinter.scrolledtext import ScrolledText
 import re
 
@@ -33,10 +29,53 @@ except Exception:
 
 
 def get_appdata_path():
-    # Retorna a pasta de appdata do usuário no Windows, senão usa home
     if sys.platform.startswith('win'):
         return os.environ.get('APPDATA') or os.path.expanduser('~')
     return os.path.expanduser('~')
+
+
+class Tooltip:
+    def __init__(self, widget, text, delay=400):
+        self.widget = widget
+        self.text = text
+        self.delay = delay
+        self._id = None
+        self._tip = None
+        widget.bind('<Enter>', self._schedule)
+        widget.bind('<Leave>', self._hide)
+        widget.bind('<ButtonPress>', self._hide)
+
+    def _schedule(self, event=None):
+        self._unschedule()
+        self._id = self.widget.after(self.delay, self._show)
+
+    def _unschedule(self):
+        if self._id:
+            try:
+                self.widget.after_cancel(self._id)
+            except Exception:
+                pass
+            self._id = None
+
+    def _show(self):
+        if self._tip or not self.widget.winfo_ismapped():
+            return
+        x = self.widget.winfo_rootx() + 20
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+        self._tip = tk.Toplevel(self.widget)
+        self._tip.wm_overrideredirect(True)
+        self._tip.wm_geometry(f'+{x}+{y}')
+        lbl = tk.Label(self._tip, text=self.text, justify='left', background='#ffffe0', relief='solid', borderwidth=1, font=('Segoe UI', 9))
+        lbl.pack(ipadx=6, ipady=3)
+
+    def _hide(self, event=None):
+        self._unschedule()
+        if self._tip:
+            try:
+                self._tip.destroy()
+            except Exception:
+                pass
+            self._tip = None
 
 
 class CSInfoGUI(tk.Tk):
@@ -51,17 +90,13 @@ class CSInfoGUI(tk.Tk):
         self._processing = False
         self.last_lines = []
         self._last_collection_computer = None
-        self.machine_list = []  # list of dicts: {name, alias, online}
+        self.machine_list = []
         self.machine_json_path = self._get_machine_json_path()
-        self.debug = bool(os.environ.get('CSINFO_GUI_DEBUG'))
 
-        # build UI
+        # UI
         self._build_ui()
-
-        # load persisted machines
         self.load_machine_list()
-
-        # start queue processor
+        self.protocol('WM_DELETE_WINDOW', self._on_close_attempt)
         self.after(100, self._process_queue)
 
     def _get_machine_json_path(self):
@@ -89,7 +124,6 @@ class CSInfoGUI(tk.Tk):
         self.ent_alias.pack()
         self.ent_alias.bind('<KeyRelease>', self._on_alias_keyrelease)
 
-        # credentials
         ttk.Label(left, text='Usuário (opcional):').pack(anchor='w', pady=(8, 0))
         self.ent_user = ttk.Entry(left, width=32)
         self.ent_user.pack()
@@ -97,7 +131,6 @@ class CSInfoGUI(tk.Tk):
         self.ent_pass = ttk.Entry(left, width=32, show='*')
         self.ent_pass.pack()
 
-        # save / delete
         btn_fr = ttk.Frame(left)
         btn_fr.pack(pady=8, fill='x')
         self.btn_save = ttk.Button(btn_fr, text='Salvar', command=self.save_selected_or_new_machine)
@@ -119,7 +152,6 @@ class CSInfoGUI(tk.Tk):
 
         ttk.Button(left, text='Abrir pasta de máquinas', command=self.open_machine_json_folder).pack(fill='x', pady=(8, 0))
 
-        # middle: machine list
         mid = ttk.Frame(frm)
         mid.pack(side='left', fill='both', expand=True, padx=(8, 8))
         self.tree = ttk.Treeview(mid, columns=('name', 'alias', 'status'), show='headings', selectmode='browse')
@@ -130,19 +162,16 @@ class CSInfoGUI(tk.Tk):
         self.tree.column('alias', width=160, anchor='center')
         self.tree.column('status', width=90, anchor='center')
         self.tree.pack(fill='both', expand=True)
-
-        # tag styling (backgrounds)
         try:
             self.tree.tag_configure('online', background='#e6ffed')
             self.tree.tag_configure('offline', background='#ffe6e6')
         except Exception:
             pass
+        self.tree.bind('<Double-1>', lambda e: self._load_selection_into_form())
 
-        # right: output + progress
         right = ttk.Frame(frm)
         right.pack(side='right', fill='both', expand=True)
-        # wrap='word' ensures lines wrap to the visible width (dynamic with resize)
-        self.txt_output = ScrolledText(right, height=20, state='disabled', wrap='word')
+        self.txt_output = ScrolledText(right, height=20, state='disabled', wrap='word', font=('Consolas', 10))
         self.txt_output.pack(fill='both', expand=True)
 
         bar_fr = ttk.Frame(right)
@@ -152,10 +181,10 @@ class CSInfoGUI(tk.Tk):
         self.lbl_progress = ttk.Label(bar_fr, text='Pronto')
         self.lbl_progress.pack(side='right')
 
-        # attach double-click on tree to load selected
-        self.tree.bind('<Double-1>', lambda e: self._load_selection_into_form())
+        rodape = tk.Label(self, text='CSInfo GUI', font=('Segoe UI', 8), fg='#666')
+        rodape.pack(side='bottom', pady=(0, 6), fill='x')
 
-    # ---------------- persistence ----------------
+    # persistence
     def load_machine_list(self):
         try:
             if os.path.exists(self.machine_json_path):
@@ -186,109 +215,100 @@ class CSInfoGUI(tk.Tk):
             alias = (m.get('alias') or '').strip()
             online = bool(m.get('online'))
             tag = 'online' if online else 'offline'
-            iid = name or alias
             try:
-                self.tree.insert('', 'end', iid, values=(name.upper(), alias.upper(), 'ONLINE' if online else 'OFFLINE'), tags=(tag,))
+                self.tree.insert('', 'end', values=(name.upper(), alias.upper(), 'ONLINE' if online else 'OFFLINE'), tags=(tag,))
             except Exception:
-                # fallback: insert without iid
                 try:
-                    self.tree.insert('', 'end', values=(name.upper(), alias.upper(), 'ONLINE' if online else 'OFFLINE'), tags=(tag,))
+                    self.tree.insert('', 'end', values=(name.upper(), alias.upper(), 'ONLINE' if online else 'OFFLINE'))
                 except Exception:
                     pass
 
-    # ---------------- machine CRUD ----------------
-    def _on_name_keyrelease(self, event=None):
-        v = (self.ent_computer.get() or '').upper()
-        pos = self.ent_computer.index(tk.INSERT)
-        self.ent_computer.delete(0, tk.END)
-        self.ent_computer.insert(0, v)
-        try:
-            self.ent_computer.icursor(pos)
-        except Exception:
-            pass
-
-    def _on_alias_keyrelease(self, event=None):
-        v = (self.ent_alias.get() or '').upper()
-        pos = self.ent_alias.index(tk.INSERT)
-        self.ent_alias.delete(0, tk.END)
-        self.ent_alias.insert(0, v)
-        try:
-            self.ent_alias.icursor(pos)
-        except Exception:
-            pass
-
+    # CRUD
     def save_selected_or_new_machine(self):
         name = (self.ent_computer.get() or '').strip()
         alias = (self.ent_alias.get() or '').strip()
         if not name:
-            self._append_output('Nome da máquina é obrigatório para salvar.')
+            messagebox.showwarning('Salvar', 'Informe o nome da máquina antes de salvar')
             return
         if not alias:
-            self._append_output('Apelido é obrigatório para salvar.')
+            messagebox.showwarning('Salvar', 'Informe um apelido antes de salvar')
             return
-        existing = next((x for x in self.machine_list if str(x.get('name') or '').strip().upper() == name.upper()), None)
+        name = name.upper()
+        alias = alias.upper()
+        existing = next((x for x in self.machine_list if str(x.get('name') or '').strip().upper() == name), None)
         if existing:
             existing['alias'] = alias
         else:
             self.machine_list.append({'name': name, 'alias': alias, 'online': False})
         self.save_machine_list()
-        self.populate_machine_tree()
-        # quick ping this host
         try:
             threading.Thread(target=self._ping_single_and_queue, args=(name,), daemon=True).start()
         except Exception:
             pass
-        self._append_output(f"Máquina '{name}' salva.")
 
     def delete_selected_machine(self):
         sel = self.tree.selection()
         if not sel:
             return
-        iid = sel[0]
-        # find by name (case-insensitive)
-        name = iid
+        vals = self.tree.item(sel[0], 'values')
+        name = vals[0] if vals else None
+        if not name:
+            return
         self.machine_list = [m for m in self.machine_list if str(m.get('name') or '').strip().upper() != str(name).strip().upper()]
         self.save_machine_list()
-        self.populate_machine_tree()
-        self._append_output(f"Máquina '{name}' excluída.")
 
     def open_machine_json_folder(self):
-        p = os.path.abspath(self.machine_json_path)
-        folder = os.path.dirname(p)
         try:
-            if sys.platform.startswith('win'):
-                os.startfile(folder)
-            else:
-                subprocess.run(['xdg-open', folder])
-        except Exception as e:
-            self._append_output(f"Falha ao abrir pasta: {e}")
+            folder = os.path.dirname(self.machine_json_path)
+            if os.path.exists(folder):
+                if sys.platform.startswith('win'):
+                    os.startfile(folder)
+                else:
+                    subprocess.run(['xdg-open', folder])
+        except Exception:
+            pass
 
-    def refresh_machine_statuses(self):
-        thr = threading.Thread(target=self._ping_worker, daemon=True)
-        thr.start()
+    # UI helpers
+    def _on_name_keyrelease(self, event=None):
+        try:
+            v = (self.ent_computer.get() or '').upper()
+            pos = self.ent_computer.index(tk.INSERT)
+            self.ent_computer.delete(0, tk.END)
+            self.ent_computer.insert(0, v)
+            try:
+                self.ent_computer.icursor(pos)
+            except Exception:
+                pass
+        except Exception:
+            pass
 
+    def _on_alias_keyrelease(self, event=None):
+        try:
+            v = (self.ent_alias.get() or '').upper()
+            pos = self.ent_alias.index(tk.INSERT)
+            self.ent_alias.delete(0, tk.END)
+            self.ent_alias.insert(0, v)
+            try:
+                self.ent_alias.icursor(pos)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    # ping helpers
     def _ping_host(self, host):
         if not host:
             return False
-        if sys.platform.startswith('win'):
-            cmd = ['ping', '-n', '1', '-w', '1000', host]
-        else:
-            cmd = ['ping', '-c', '1', '-W', '1', host]
+        host = host.strip()
         try:
-            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return res.returncode == 0
+            if sys.platform.startswith('win'):
+                proc = subprocess.run(['ping', '-n', '1', '-w', '1000', host], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return proc.returncode == 0
+            else:
+                proc = subprocess.run(['ping', '-c', '1', '-W', '1', host], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return proc.returncode == 0
         except Exception:
             return False
-
-    def _ping_worker(self):
-        for m in list(self.machine_list):
-            name = (m.get('name') or '').strip()
-            on = self._ping_host(name)
-            m['online'] = on
-            status_text = 'ONLINE' if on else 'OFFLINE'
-            # push by name so tree matching tries both iid and first-column match
-            self.queue.put(('machine_status', name, status_text))
-        self.save_machine_list()
 
     def _ping_single_and_queue(self, name):
         try:
@@ -298,22 +318,25 @@ class CSInfoGUI(tk.Tk):
         except Exception:
             pass
 
-    # ---------------- collection / backend ----------------
+    def _ping_worker(self):
+        for m in list(self.machine_list):
+            name = (m.get('name') or '').strip()
+            on = self._ping_host(name)
+            m['online'] = on
+            status_text = 'ONLINE' if on else 'OFFLINE'
+            self.queue.put(('machine_status', name, status_text))
+        self.save_machine_list()
+
+    # collection
     def start_collection(self):
         if self.worker_thread and self.worker_thread.is_alive():
             return
+        computer = (self.ent_computer.get() or '').strip() or None
+        alias = (self.ent_alias.get() or '').strip() or None
 
-        computer = self.ent_computer.get().strip() or None
-        alias = self.ent_alias.get().strip() or None
-        export = self.cmb_export.get()
-
-        # clear output
         self.clear_output()
-
-        # lock UI
         self._set_controls_state('disabled')
         self._processing = True
-        # prevent window close
         try:
             self.protocol('WM_DELETE_WINDOW', self._on_close_attempt)
         except Exception:
@@ -328,10 +351,10 @@ class CSInfoGUI(tk.Tk):
                     self.queue.put(('line', str(line_or_stage)))
                 else:
                     try:
-                        perc = int(percent_or_none)
+                        p = int(percent_or_none)
                     except Exception:
-                        perc = 0
-                    self.queue.put(('progress', perc, str(line_or_stage)))
+                        p = 0
+                    self.queue.put(('progress', p, str(line_or_stage)))
             except Exception:
                 pass
 
@@ -339,27 +362,27 @@ class CSInfoGUI(tk.Tk):
             try:
                 user = (self.ent_user.get() or '').strip()
                 passwd = (self.ent_pass.get() or '')
-                if user and passwd and csinfo:
+                try:
+                    self._last_collection_computer = computer
+                except Exception:
+                    self._last_collection_computer = None
+                if csinfo and user and passwd:
                     try:
                         csinfo.set_default_credential(user, passwd)
                     except Exception:
                         pass
                 try:
-                    # record the computer used for this collection so exports (PDF) can include it
-                    try:
-                        self._last_collection_computer = computer
-                    except Exception:
-                        self._last_collection_computer = None
-
                     if csinfo:
-                        csinfo.main(export_type=(export if export != 'nenhum' else None), barra_callback=barra_callback, computer_name=computer, machine_alias=alias)
+                        csinfo.main(export_type=(self.cmb_export.get() if self.cmb_export.get() != 'nenhum' else None),
+                                    barra_callback=barra_callback,
+                                    computer_name=computer,
+                                    machine_alias=alias)
                     else:
-                        # simulate
                         for i in range(0, 101, 10):
                             barra_callback(i, f"Simulando etapa {i}")
-                            threading.Event().wait(0.08)
-                        barra_callback(None, 'Simulated line 1')
-                        barra_callback(None, 'Simulated line 2')
+                            threading.Event().wait(0.05)
+                        barra_callback(None, 'Linha simulada 1')
+                        barra_callback(None, 'Linha simulada 2')
                     self.queue.put(('done', None))
                 finally:
                     if csinfo:
@@ -373,7 +396,7 @@ class CSInfoGUI(tk.Tk):
         self.worker_thread = threading.Thread(target=worker, daemon=True)
         self.worker_thread.start()
 
-    # ---------------- queue processing ----------------
+    # queue processing
     def _append_output(self, text):
         try:
             self.txt_output.configure(state='normal')
@@ -407,144 +430,94 @@ class CSInfoGUI(tk.Tk):
                         except Exception:
                             pass
                     self.txt_output.configure(state='disabled')
-
-                elif kind == 'machine_status':
-                    iid = item[1]
-                    status = item[2]
-                    if status in ('🟢', '🔴'):
-                        status_text = 'ONLINE' if status == '🟢' else 'OFFLINE'
-                    else:
-                        status_text = str(status).strip().upper()
-
-                    vals = None
+                elif kind == 'progress':
+                    pct = item[1]
+                    stage = item[2]
                     try:
-                        vals = self.tree.item(iid, 'values')
+                        self.progress['value'] = int(pct)
                     except Exception:
-                        vals = None
-
-                    if not vals:
-                        found = None
-                        for child in self.tree.get_children():
-                            v = self.tree.item(child, 'values')
-                            if self.debug:
-                                self._append_output(f"[debug] checking child={child} values={v}")
-                            if v and str(v[0]).strip().upper() == str(iid).strip().upper():
-                                found = child
-                                vals = v
-                                break
-                        if found:
-                            iid = found
-
-                    if vals:
-                        try:
-                            self.tree.set(iid, 'status', status_text)
-                            tag = 'online' if status_text == 'ONLINE' else 'offline'
-                            try:
-                                self.tree.item(iid, tags=(tag,))
-                            except Exception:
-                                pass
-                            try:
-                                self.update_idletasks()
-                            except Exception:
-                                pass
-                        except Exception:
-                            try:
-                                self.tree.item(iid, values=(vals[0], vals[1], status_text))
-                            except Exception:
-                                pass
-
+                        pass
                     try:
-                        name_key = str((vals[0] if vals else iid)).strip()
+                        self.lbl_progress.configure(text=str(stage))
+                    except Exception:
+                        pass
+                elif kind == 'machine_status':
+                    key = item[1]
+                    status = item[2]
+                    status_text = 'ONLINE' if str(status).strip().upper() == 'ONLINE' else 'OFFLINE'
+                    # update tree if present
+                    for child in self.tree.get_children():
+                        try:
+                            v = self.tree.item(child, 'values')
+                            if v and (str(v[0]).strip().upper() == str(key).strip().upper() or str(v[1]).strip().upper() == str(key).strip().upper()):
+                                try:
+                                    self.tree.item(child, values=(v[0], v[1], status_text), tags=('online' if status_text == 'ONLINE' else 'offline',))
+                                except Exception:
+                                    pass
+                                break
+                        except Exception:
+                            continue
+                    try:
                         for m in self.machine_list:
-                            if str(m.get('name') or '').strip().upper() == name_key.upper():
+                            if str(m.get('name') or '').strip().upper() == str(key).strip().upper():
                                 m['online'] = (status_text == 'ONLINE')
                                 break
                     except Exception:
                         pass
-
                     try:
-                        self._append_output(f"[ping] {name_key} -> {status_text.lower()}")
+                        self._append_output(f"[ping] {key} -> {status_text}")
                     except Exception:
                         pass
-
-                elif kind == 'progress':
-                    perc = item[1]
-                    etapa = item[2]
-                    try:
-                        self.progress['value'] = perc
-                        self.lbl_progress.configure(text=f"{etapa} — {perc}%")
-                    except Exception:
-                        pass
-
                 elif kind == 'done':
-                    self.lbl_progress.configure(text='Concluído')
+                    self._processing = False
+                    self._set_controls_state('normal')
+                    self.btn_start.configure(text='Coletar')
+                    self.lbl_progress.configure(text='Pronto')
                     self.progress['value'] = 100
-                    self.btn_start.configure(text='Coletar')
-                    self._set_controls_state('normal')
-                    self._processing = False
-                    try:
-                        self.protocol('WM_DELETE_WINDOW', self.destroy)
-                    except Exception:
-                        pass
-                    self._update_export_button_state()
-
+                    if self.last_lines:
+                        self.btn_export.configure(state='normal')
                 elif kind == 'error':
-                    msg = item[1]
-                    self._append_output(f"ERRO: {msg}")
-                    self.lbl_progress.configure(text='Erro')
-                    self.btn_start.configure(text='Coletar')
-                    self._set_controls_state('normal')
                     self._processing = False
-                    try:
-                        self.protocol('WM_DELETE_WINDOW', self.destroy)
-                    except Exception:
-                        pass
-
+                    self._set_controls_state('normal')
+                    self.btn_start.configure(text='Coletar')
+                    self.lbl_progress.configure(text='Erro')
+                    messagebox.showerror('Erro', str(item[1]))
         except queue.Empty:
             pass
-        # re-schedule
-        self.after(100, self._process_queue)
+        except Exception:
+            pass
+        finally:
+            if not self._processing:
+                self.progress['value'] = 0
+            self.after(100, self._process_queue)
 
-    # ---------------- UI helpers ----------------
     def _set_controls_state(self, state='normal'):
-        widgets = [self.ent_computer, self.ent_alias, self.ent_user, self.ent_pass, self.btn_save, self.btn_delete, self.cmb_export, self.btn_start]
+        widgets = [self.ent_computer, self.ent_alias, self.ent_user, self.ent_pass, self.cmb_export, self.btn_save, self.btn_delete, self.btn_export, self.btn_start]
         for w in widgets:
             try:
                 if state == 'disabled':
-                    w.state(['disabled']) if isinstance(w, ttk.Widget) else w.configure(state='disabled')
-                else:
-                    # enable
                     try:
-                        w.state(['!disabled'])
+                        w.configure(state='disabled')
                     except Exception:
-                        try:
-                            w.configure(state='normal')
-                        except Exception:
-                            pass
+                        pass
+                else:
+                    try:
+                        w.configure(state='normal')
+                    except Exception:
+                        pass
             except Exception:
-                try:
-                    w.configure(state=state)
-                except Exception:
-                    pass
+                pass
 
     def clear_output(self):
         try:
             self.txt_output.configure(state='normal')
             self.txt_output.delete('1.0', tk.END)
             self.txt_output.configure(state='disabled')
+            self.last_lines = []
+            self.btn_export.configure(state='disabled')
         except Exception:
             pass
 
-    def _on_close_attempt(self):
-        if getattr(self, '_processing', False):
-            self._append_output('A coleta está em execução. Aguarde a conclusão antes de fechar a janela.')
-            return
-        try:
-            self.destroy()
-        except Exception:
-            pass
-
-    # ---------------- export ----------------
     def _update_export_button_state(self):
         fmt = self.cmb_export.get()
         enabled = (fmt != 'nenhum' and bool(self.last_lines) and not self._processing)
@@ -557,85 +530,88 @@ class CSInfoGUI(tk.Tk):
             pass
 
     def _do_export(self):
-        fmt = self.cmb_export.get()
-        if fmt == 'nenhum':
-            return
         if not self.last_lines:
-            self._append_output('Nada para exportar. Execute a coleta primeiro.')
+            messagebox.showinfo('Exportar', 'Nenhum dado para exportar')
             return
-        # construir nome de arquivo seguindo padrão do backend: Info_maquina_<apelido>_<nomemaquina>.txt
-        folder = os.getcwd()
+        fmt = self.cmb_export.get()
+        alias = (self.ent_alias.get() or '').strip() or None
+        comp = (self._last_collection_computer or (self.ent_computer.get() or '').strip() or '')
 
-        def _safe_filename(s):
+        def _safe(s):
             try:
                 if csinfo and hasattr(csinfo, 'safe_filename'):
                     return csinfo.safe_filename(s)
             except Exception:
                 pass
-            if not s:
-                return ''
-            return re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', str(s))
+            return re.sub(r'[^0-9A-Za-z_.-]+', '_', str(s or ''))
 
-        # usar apelido se fornecido, senão apenas o nome da máquina da última coleta
-        alias = (self.ent_alias.get() or '').strip()
-        comp = getattr(self, '_last_collection_computer', None) or self.ent_computer.get().strip() or ''
-        safe_name = _safe_filename(comp)
-        if alias:
-            safe_alias = _safe_filename(alias)
-            base = f"Info_maquina_{safe_alias}_{safe_name}"
-        else:
-            base = f"Info_maquina_{safe_name}"
+        base = f"Info_maquina_{_safe(alias) + '_' if alias else ''}{_safe(comp)}"
+        folder = os.getcwd()
         try:
             if fmt in ('txt', 'ambos'):
-                path_txt = os.path.join(folder, base + '.txt')
-                if csinfo and hasattr(csinfo, 'write_report'):
-                    try:
-                        csinfo.write_report(path_txt, self.last_lines)
-                    except TypeError:
-                        # older/newer signatures: try fallback with 2 args
-                        csinfo.write_report(path_txt, self.last_lines)
-                else:
-                    with open(path_txt, 'w', encoding='utf-8') as fh:
-                        fh.write('\n'.join(self.last_lines))
-                self._append_output(f"Exportado TXT: {path_txt}")
+                p = os.path.join(folder, base + '.txt')
+                try:
+                    if csinfo and hasattr(csinfo, 'write_report'):
+                        try:
+                            csinfo.write_report(p, self.last_lines)
+                        except TypeError:
+                            csinfo.write_report(p, self.last_lines)
+                    else:
+                        with open(p, 'w', encoding='utf-8') as fh:
+                            fh.write('\n'.join(self.last_lines))
+                    self._append_output(f'Exportado TXT: {p}')
+                except Exception as e:
+                    messagebox.showerror('Exportar', f'Erro ao escrever TXT: {e}')
+                    return
             if fmt in ('pdf', 'ambos'):
-                path_pdf = os.path.join(folder, base + '.pdf')
-                if csinfo and hasattr(csinfo, 'write_pdf_report'):
-                    comp_arg = getattr(self, '_last_collection_computer', None) or comp
-                    csinfo.write_pdf_report(path_pdf, self.last_lines, comp_arg)
+                p = os.path.join(folder, base + '.pdf')
+                try:
+                    if csinfo and hasattr(csinfo, 'write_pdf_report'):
+                        try:
+                            csinfo.write_pdf_report(p, self.last_lines, comp)
+                        except TypeError:
+                            csinfo.write_pdf_report(p, self.last_lines)
+                    else:
+                        with open(p, 'w', encoding='utf-8') as fh:
+                            fh.write('\n'.join(self.last_lines))
+                    self._append_output(f'Exportado PDF: {p}')
+                except Exception as e:
+                    messagebox.showerror('Exportar', f'Erro ao escrever PDF: {e}')
+                    return
+            try:
+                if sys.platform.startswith('win'):
+                    os.startfile(folder)
                 else:
-                    with open(path_pdf, 'w', encoding='utf-8') as fh:
-                        fh.write('\n'.join(self.last_lines))
-                self._append_output(f"Exportado PDF: {path_pdf}")
+                    subprocess.run(['xdg-open', folder])
+            except Exception:
+                pass
+            messagebox.showinfo('Exportar', 'Exportação concluída')
         except Exception as e:
-            self._append_output(f"Falha ao exportar: {e}")
+            messagebox.showerror('Exportar', str(e))
+
+    def _on_close_attempt(self):
+        if self._processing:
+            messagebox.showwarning('Aguarde', 'Processamento em andamento. Aguarde o fim antes de fechar.')
             return
-
         try:
-            if sys.platform.startswith('win'):
-                os.startfile(folder)
-            else:
-                subprocess.run(['xdg-open', folder])
+            self.destroy()
         except Exception:
-            pass
+            try:
+                self.quit()
+            except Exception:
+                pass
 
-    # ---------------- small helpers ----------------
     def _load_selection_into_form(self):
         sel = self.tree.selection()
         if not sel:
             return
-        iid = sel[0]
-        vals = None
-        try:
-            vals = self.tree.item(iid, 'values')
-        except Exception:
-            vals = None
+        vals = self.tree.item(sel[0], 'values')
         if vals:
             try:
                 self.ent_computer.delete(0, tk.END)
                 self.ent_computer.insert(0, vals[0])
                 self.ent_alias.delete(0, tk.END)
-                self.ent_alias.insert(0, vals[1])
+                self.ent_alias.insert(0, vals[1] if len(vals) > 1 else '')
             except Exception:
                 pass
 

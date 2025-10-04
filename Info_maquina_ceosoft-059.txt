@@ -1,12 +1,12 @@
 ﻿CEOsoftware Sistemas
-CSInfo - Inventário de hardware e software - v1.0.2
+CSInfo - Inventário de hardware e software - vdesconhecida
 Gerado por: alex
 
-Nome do computador: CEOSOFT-059
+Nome do computador: ceosoft-059
 Tipo: Desktop
 Gerado por: alex
 
-Relatório gerado em: 02/10/2025 - 17:58
+Relatório gerado em: 04/10/2025 - 18:37
 
 INFORMAÇÕES DO SISTEMA
 Versão do sistema operacional: Microsoft Windows 11 Pro (Version 10.0.26100) - 64 bits
@@ -36,13 +36,12 @@ Disco 1: ST1000DM010-2EP102 | Tamanho: 931.51 GB
   Tipo: HDD | Interface: IDE
 Disco 2: KINGSTON SA400S37960G | Tamanho: 894.25 GB
   Tipo: HDD | Interface: IDE
-Unidade C: (Sem rótulo) | Total: 893.51 GB | Usado: 558.26 GB | Livre: 335.25 GB | Sistema: NTFS
+Unidade C: (Sem rótulo) | Total: 893.51 GB | Usado: 560.40 GB | Livre: 333.11 GB | Sistema: NTFS
 Unidade D: (Sem rótulo) | Total: 465.37 GB | Usado: 318.79 GB | Livre: 146.58 GB | Sistema: NTFS
 Unidade E: (Partição 2) | Total: 435.29 GB | Usado: 135.91 GB | Livre: 299.38 GB | Sistema: NTFS
 Unidade F: (Swapping) | Total: 29.30 GB | Usado: 1.76 GB | Livre: 27.54 GB | Sistema: NTFS
 
-Monitor 1: DEL | Modelo: DELL E1910 | Serial: X234R03V0SYL
-Monitor 2: GSM | Modelo: LG FULL HD | Serial: 16843009
+Monitor 1: NÃO OBTIDO | Modelo: NÃO OBTIDO | Serial: NÃO OBTIDO
 
 Teclado conectado: SIM
 Mouse conectado: SIM
@@ -52,13 +51,17 @@ Placa mãe: ASUSTeK COMPUTER INC. | Modelo: H110M-C/BR | Serial: 180414466200454
 Placa de Rede 1: Realtek PCIe GBE Family Controller | Fabricante: Realtek | Velocidade: 100 Mbps | MAC: 2C:FD:A1:C8:77:61
 
 Placa de Vídeo 1: BB Capture Driver | Fabricante: Blueberry Consultants | Memória: N/A | Tipo: Onboard (Integrada)
-Placa de Vídeo 2: NVIDIA GeForce GT 220  | Fabricante: NVIDIA | Memória: 1 GB | Tipo: Offboard (Dedicada)
-Placa de Vídeo 3: Intel(R) HD Graphics 630 | Fabricante: Intel Corporation | Memória: 1 GB | Tipo: Onboard (Integrada)
+Placa de Vídeo 2: Microsoft Remote Display Adapter | Fabricante: Microsoft | Memória: N/A | Tipo: Onboard (Integrada)
+Placa de Vídeo 3: NVIDIA GeForce GT 220  | Fabricante: NVIDIA | Memória: 1 GB | Tipo: Offboard (Dedicada)
+Placa de Vídeo 4: Intel(R) HD Graphics 630 | Fabricante: Intel Corporation | Memória: 1 GB | Tipo: Onboard (Integrada)
 
-Impressora 1: OneNote (Desktop) | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Send to Microsoft OneNote 16 Driver
-Impressora 2: NPI1F7468 (HP LaserJet Professional M1212nf MFP) | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: HP LaserJet Mono PCLmS Class Driver
-Impressora 3: Microsoft Print to PDF | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Microsoft Print To PDF
-Impressora 4: HP LaserJet 1020 | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: HP LaserJet 1020
+Impressora 1: Microsoft XPS Document Writer (2 redirecionada) | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Remote Desktop Easy Print
+Impressora 2: Fax (2 redirecionada) | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Remote Desktop Easy Print
+Impressora 3: Microsoft Print to PDF (2 redirecionada) | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Remote Desktop Easy Print
+Impressora 4: OneNote (Desktop) | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Send to Microsoft OneNote 16 Driver
+Impressora 5: NPI1F7468 (HP LaserJet Professional M1212nf MFP) | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: HP LaserJet Mono PCLmS Class Driver
+Impressora 6: Microsoft Print to PDF | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Microsoft Print To PDF
+Impressora 7: HP LaserJet 1020 | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: HP LaserJet 1020
 
 ADMINISTRADORES
 Administrador 1: CEOSOFT-059\Administrador
@@ -87,7 +90,7 @@ SOFTWARES INSTALADOS
 15. Flashback Express 7 | Versão: 7.7.0.445 | Editor: Blueberry Software
 16. GatewayComponents | Versão: 16.22.5 | Editor: Microsoft Corporation
 17. Git | Versão: 2.51.0.2 | Editor: The Git Development Community
-18. Google Chrome | Versão: 140.0.7339.208 | Editor: Google LLC
+18. Google Chrome | Versão: 141.0.7390.54 | Editor: Google LLC
 19. Gravador VSS da Microsoft para SQL Server 2022 | Versão: 16.0.1000.6 | Editor: Microsoft Corporation
 20. HP LaserJet 1020 Series | Versão: N/A | Editor: N/A
 21. Instalação do Microsoft SQL Server 2014 (em inglês) | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
@@ -97,7 +100,7 @@ SOFTWARES INSTALADOS
 25. Microsoft .NET Host FX Resolver - 8.0.20 (x64) | Versão: 64.80.39230 | Editor: Microsoft Corporation
 26. Microsoft .NET Runtime - 8.0.20 (x64) | Versão: 64.80.39230 | Editor: Microsoft Corporation
 27. Microsoft Application Error Reporting | Versão: 12.0.6012.5000 | Editor: Microsoft Corporation
-28. Microsoft Edge | Versão: 140.0.3485.94 | Editor: Microsoft Corporation
+28. Microsoft Edge | Versão: 141.0.3537.57 | Editor: Microsoft Corporation
 29. Microsoft Edge WebView2 Runtime | Versão: 140.0.3485.94 | Editor: Microsoft Corporation
 30. Microsoft Fabric Integration Runtime | Versão: 5.55.9295.2 | Editor: Microsoft Corporation
 31. Microsoft Help Viewer 1.1 | Versão: 1.1.40219 | Editor: Microsoft Corporation

@@ -1,0 +1,103 @@
+"""CSInfo GUI - CLEAN NEW FILE
+
+This is a safe, single-file implementation created to replace the
+previous conflicted csinfo_gui.py. After reviewing, if this is OK
+we will move it into place.
+"""
+
+import json
+import os
+import queue
+import subprocess
+import sys
+import threading
+import tkinter as tk
+from tkinter import ttk, messagebox
+from tkinter.scrolledtext import ScrolledText
+import re
+
+try:
+    import csinfo
+except Exception:
+    csinfo = None
+
+
+def get_appdata_path():
+    if sys.platform.startswith('win'):
+        return os.environ.get('APPDATA') or os.path.expanduser('~')
+    return os.path.expanduser('~')
+
+
+class CSInfoGUI(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title('CSInfo GUI')
+        self.geometry('980x640')
+        self.queue = queue.Queue()
+        self._processing = False
+        self.last_lines = []
+        self.machine_json_path = os.path.join(get_appdata_path(), 'CSInfo', 'machines_history.json')
+        self._build_ui()
+        self.load_machine_list()
+        self.after(100, self._process_queue)
+        self.protocol('WM_DELETE_WINDOW', self._on_close_attempt)
+
+    def _build_ui(self):
+        frm = ttk.Frame(self)
+        frm.pack(fill='both', expand=True, padx=8, pady=8)
+        left = ttk.Frame(frm)
+        left.pack(side='left', fill='y')
+        ttk.Label(left, text='Máquina:').pack(anchor='w')
+        self.ent_computer = ttk.Entry(left, width=32)
+        self.ent_computer.pack()
+        ttk.Label(left, text='Apelido:').pack(anchor='w')
+        self.ent_alias = ttk.Entry(left, width=32)
+        self.ent_alias.pack()
+        self.btn_start = ttk.Button(left, text='Coletar', command=self.start_collection)
+        self.btn_start.pack(fill='x')
+        mid = ttk.Frame(frm)
+        mid.pack(side='left', fill='both', expand=True)
+        self.tree = ttk.Treeview(mid, columns=('name','alias','status'), show='headings')
+        self.tree.heading('name', text='Máquina')
+        self.tree.heading('alias', text='Apelido')
+        self.tree.heading('status', text='Estado')
+        self.tree.pack(fill='both', expand=True)
+        right = ttk.Frame(frm)
+        right.pack(side='right', fill='both', expand=True)
+        self.txt_output = ScrolledText(right, wrap='word')
+        self.txt_output.pack(fill='both', expand=True)
+        self.progress = ttk.Progressbar(right, orient='horizontal', mode='determinate')
+        self.progress.pack(fill='x')
+
+    def load_machine_list(self):
+        try:
+            os.makedirs(os.path.dirname(self.machine_json_path), exist_ok=True)
+            if os.path.exists(self.machine_json_path):
+                with open(self.machine_json_path, 'r', encoding='utf-8') as f:
+                    self.machine_list = json.load(f)
+            else:
+                self.machine_list = []
+        except Exception:
+            self.machine_list = []
+        self.populate_tree()
+
+    def populate_tree(self):
+        for i in self.tree.get_children():
+            self.tree.delete(i)
+        for m in getattr(self, 'machine_list', []):
+            self.tree.insert('', 'end', values=(m.get('name'), m.get('alias'), 'UNKNOWN'))
+
+    def start_collection(self):
+        self._append_output('Iniciando coleta (modo seguro)...')
+
+    def _append_output(self, s):
+        self.txt_output.insert(tk.END, s + '\n')
+        self.txt_output.see(tk.END)
+
+
+def main():
+    app = CSInfoGUI()
+    app.mainloop()
+
+if __name__ == '__main__':
+    main()

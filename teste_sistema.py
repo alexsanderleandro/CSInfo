@@ -125,10 +125,7 @@ def get_memory_modules(computer_name=None):
     try:
         result = run_powershell(ps_script, computer_name=computer_name)
         if result and result.strip():
-            parsed = json.loads(result)
-            if isinstance(parsed, dict):
-                parsed = [parsed]
-            return parsed
+            return json.loads(result)
         return []
     except Exception as e:
         print(f"{Cores.VERMELHO}Erro ao processar informações dos módulos de memória: {e}{Cores.FIM}")
@@ -182,10 +179,7 @@ def get_disk_info(computer_name=None):
     try:
         result = run_powershell(ps_script, computer_name=computer_name)
         if result and result.strip():
-            parsed = json.loads(result)
-            if isinstance(parsed, dict):
-                parsed = [parsed]
-            return parsed
+            return json.loads(result)
         return []
     except Exception as e:
         print(f"{Cores.VERMELHO}Erro ao processar informações dos discos: {e}{Cores.FIM}")
@@ -239,10 +233,7 @@ def get_network_info(computer_name=None):
     try:
         result = run_powershell(ps_script, computer_name=computer_name)
         if result and result.strip():
-            parsed = json.loads(result)
-            if isinstance(parsed, dict):
-                parsed = [parsed]
-            return parsed
+            return json.loads(result)
         return []
     except Exception as e:
         print(f"{Cores.VERMELHO}Erro ao processar informações de rede: {e}{Cores.FIM}")
