@@ -88,6 +88,7 @@ class CSInfoGUI(tk.Tk):
         self.queue = queue.Queue()
         self.worker_thread = None
         self._processing = False
+        self._pinging = False
         self.last_lines = []
         self._last_collection_computer = None
         self.machine_list = []
@@ -126,8 +127,11 @@ class CSInfoGUI(tk.Tk):
 
         btn_fr = ttk.Frame(left)
         btn_fr.pack(pady=8, fill='x')
+        # Nova | Salvar | Excluir
+        self.btn_new = ttk.Button(btn_fr, text='Nova', command=self.new_machine)
+        self.btn_new.pack(side='left', fill='x', expand=True)
         self.btn_save = ttk.Button(btn_fr, text='Salvar', command=self.save_selected_or_new_machine)
-        self.btn_save.pack(side='left', fill='x', expand=True)
+        self.btn_save.pack(side='left', fill='x', expand=True, padx=(6, 0))
         self.btn_delete = ttk.Button(btn_fr, text='Excluir', command=self.delete_selected_machine)
         self.btn_delete.pack(side='left', fill='x', expand=True, padx=(6, 0))
 
@@ -144,21 +148,55 @@ class CSInfoGUI(tk.Tk):
         ttk.Label(left, text='Senha administrador da rede:').pack(anchor='w', pady=(8, 0))
         self.ent_pass = ttk.Entry(left, width=32, show='*')
         self.ent_pass.pack()
+        
+        # separador após credenciais do administrador da rede
+        ttk.Separator(left, orient='horizontal').pack(fill='x', pady=(8, 10))
+
+        # Botão Coletar logo abaixo do separador das credenciais
+        self.btn_start = ttk.Button(left, text='Coletar (F3)', command=self.start_collection)
+        self.btn_start.pack(fill='x', pady=(0, 8))
+        try:
+            Tooltip(self.btn_start, 'Inicia coleta (atalho F3)')
+        except Exception:
+            pass
+        # bind F3 para iniciar coleta
+        try:
+            self.bind('<F3>', lambda e: self.start_collection())
+        except Exception:
+            pass
+
+        # separador antes da seção de exportação
+        ttk.Separator(left, orient='horizontal').pack(fill='x', pady=(8, 8))
 
         ttk.Label(left, text='Exportar como:').pack(anchor='w', pady=(8, 0))
-        # valores internos usados pelo código: 'nenhum', 'txt', 'pdf', 'ambos'
-        self.cmb_export = ttk.Combobox(left, values=('nenhum', 'txt', 'pdf', 'ambos'), state='readonly')
-        self.cmb_export.current(0)
-        self.cmb_export.pack()
-        self.cmb_export.bind('<<ComboboxSelected>>', lambda e: self._update_export_button_state())
+        # radiobuttons para formato de exportação: 'pdf' (padrão), 'txt', 'ambos'
+        self.export_var = tk.StringVar(value='pdf')
+        self.export_frame = ttk.Frame(left)
+        self.export_frame.pack(fill='x')
+        r1 = ttk.Radiobutton(self.export_frame, text='PDF', value='pdf', variable=self.export_var, command=self._update_export_button_state)
+        r1.pack(side='left', padx=(0, 6))
+        r2 = ttk.Radiobutton(self.export_frame, text='TXT', value='txt', variable=self.export_var, command=self._update_export_button_state)
+        r2.pack(side='left', padx=(0, 6))
+        r3 = ttk.Radiobutton(self.export_frame, text='Ambos', value='ambos', variable=self.export_var, command=self._update_export_button_state)
+        r3.pack(side='left')
 
         self.btn_export = ttk.Button(left, text='Exportar', command=self._do_export, state='disabled')
         self.btn_export.pack(fill='x', pady=(8, 0))
 
-        self.btn_start = ttk.Button(left, text='Coletar', command=self.start_collection)
-        self.btn_start.pack(fill='x', pady=(12, 0))
+        self.btn_open_folder = ttk.Button(left, text='Abrir pasta de máquinas', command=self.open_machine_json_folder)
+        self.btn_open_folder.pack(fill='x', pady=(8, 0))
 
-        ttk.Button(left, text='Abrir pasta de máquinas', command=self.open_machine_json_folder).pack(fill='x', pady=(8, 0))
+        # Botão para atualizar status das máquinas (F5)
+        self.btn_refresh = ttk.Button(left, text='Atualizar (F5)', command=self.refresh_machine_status)
+        self.btn_refresh.pack(fill='x', pady=(8, 0))
+        try:
+            Tooltip(self.btn_refresh, 'Atualiza o estado (ONLINE/OFFLINE) das máquinas (atalho F5)')
+        except Exception:
+            pass
+        try:
+            self.bind('<F5>', lambda e: self.refresh_machine_status())
+        except Exception:
+            pass
 
         mid = ttk.Frame(frm)
         mid.pack(side='left', fill='both', expand=True, padx=(8, 8))
@@ -172,7 +210,8 @@ class CSInfoGUI(tk.Tk):
         self.tree.pack(fill='both', expand=True)
         try:
             self.tree.tag_configure('online', background='#e6ffed')
-            self.tree.tag_configure('offline', background='#ffe6e6')
+            # offline: slightly darker red for better contrast
+            self.tree.tag_configure('offline', background='#ffb3b3')
         except Exception:
             pass
         self.tree.bind('<Double-1>', lambda e: self._load_selection_into_form())
@@ -186,6 +225,9 @@ class CSInfoGUI(tk.Tk):
         bar_fr.pack(fill='x')
         self.progress = ttk.Progressbar(bar_fr, orient='horizontal', mode='determinate')
         self.progress.pack(fill='x', side='left', expand=True, padx=(0, 8))
+        # indicador temporário usado durante refresh de ping
+        self.lbl_ping_status = ttk.Label(bar_fr, text='', foreground='#0066cc')
+        self.lbl_ping_status.pack(side='right', padx=(0, 8))
         self.lbl_progress = ttk.Label(bar_fr, text='Pronto')
         self.lbl_progress.pack(side='right')
 
@@ -203,6 +245,11 @@ class CSInfoGUI(tk.Tk):
         except Exception:
             self.machine_list = []
         self.populate_machine_tree()
+        # iniciar verificação de ping assim que a lista for carregada
+        try:
+            threading.Thread(target=self._ping_worker, daemon=True).start()
+        except Exception:
+            pass
 
     def save_machine_list(self):
         try:
@@ -253,6 +300,21 @@ class CSInfoGUI(tk.Tk):
             threading.Thread(target=self._ping_single_and_queue, args=(name,), daemon=True).start()
         except Exception:
             pass
+        # atualizar a listagem e selecionar a máquina salva
+        try:
+            self.populate_machine_tree()
+            # selecionar o item recém-salvo
+            for child in self.tree.get_children():
+                try:
+                    vals = self.tree.item(child, 'values')
+                    if vals and str(vals[0]).strip().upper() == name:
+                        self.tree.selection_set(child)
+                        self.tree.see(child)
+                        break
+                except Exception:
+                    continue
+        except Exception:
+            pass
 
     def delete_selected_machine(self):
         sel = self.tree.selection()
@@ -264,6 +326,37 @@ class CSInfoGUI(tk.Tk):
             return
         self.machine_list = [m for m in self.machine_list if str(m.get('name') or '').strip().upper() != str(name).strip().upper()]
         self.save_machine_list()
+        # atualizar a listagem e limpar formulário se necessário
+        try:
+            self.populate_machine_tree()
+            # se a máquina deletada estava no formulário, limpar campos
+            cur_name = (self.ent_computer.get() or '').strip().upper()
+            if cur_name == str(name).strip().upper():
+                try:
+                    self.ent_computer.delete(0, tk.END)
+                    self.ent_alias.delete(0, tk.END)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def new_machine(self):
+        # limpa formulário para inserir nova máquina
+        try:
+            self.tree.selection_remove(self.tree.selection())
+        except Exception:
+            pass
+        try:
+            self.ent_computer.delete(0, tk.END)
+            self.ent_alias.delete(0, tk.END)
+            self.ent_computer.focus_set()
+            # desabilitar botão export enquanto não houver coleta
+            try:
+                self.btn_export.configure(state='disabled')
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     def open_machine_json_folder(self):
         try:
@@ -326,14 +419,65 @@ class CSInfoGUI(tk.Tk):
         except Exception:
             pass
 
+    def refresh_machine_status(self):
+        """Inicia uma atualização de status (ping) para todas as máquinas.
+        Evita reentrância usando a flag self._pinging.
+        """
+        try:
+            if self._pinging or self._processing:
+                return
+            def _runner():
+                try:
+                    self._pinging = True
+                    # reutiliza a implementação existente do _ping_worker
+                    try:
+                        self._ping_worker()
+                    except Exception:
+                        # fallback: ping manualmente
+                        for m in list(self.machine_list):
+                            name = (m.get('name') or '').strip()
+                            try:
+                                on = self._ping_host(name)
+                                status_text = 'ONLINE' if on else 'OFFLINE'
+                                self.queue.put(('machine_status', name, status_text))
+                            except Exception:
+                                pass
+                    # persist após atualização
+                    try:
+                        self.save_machine_list()
+                    except Exception:
+                        pass
+                finally:
+                    self._pinging = False
+            threading.Thread(target=_runner, daemon=True).start()
+        except Exception:
+            pass
+
     def _ping_worker(self):
-        for m in list(self.machine_list):
-            name = (m.get('name') or '').strip()
-            on = self._ping_host(name)
-            m['online'] = on
-            status_text = 'ONLINE' if on else 'OFFLINE'
-            self.queue.put(('machine_status', name, status_text))
-        self.save_machine_list()
+        try:
+            for m in list(self.machine_list):
+                name = (m.get('name') or '').strip()
+                try:
+                    on = self._ping_host(name)
+                    m['online'] = on
+                    status_text = 'ONLINE' if on else 'OFFLINE'
+                    # enqueue an update for the UI
+                    self.queue.put(('machine_status', name, status_text))
+                except Exception as ie:
+                    # errors are silently ignored for individual hosts
+                    pass
+            # persist results
+            self.save_machine_list()
+            # sinalizar conclusão ao loop principal para limpar indicador
+            try:
+                self.queue.put(('ping_done',))
+            except Exception:
+                pass
+        except Exception as e:
+            try:
+                self.queue.put(('ping_done',))
+            except Exception:
+                pass
 
     # collection
     def start_collection(self):
@@ -381,7 +525,9 @@ class CSInfoGUI(tk.Tk):
                         pass
                 try:
                     if csinfo:
-                        csinfo.main(export_type=(self.cmb_export.get() if self.cmb_export.get() != 'nenhum' else None),
+                        # export_var contém 'pdf', 'txt' ou 'ambos'
+                        expv = self.export_var.get() if getattr(self, 'export_var', None) is not None else None
+                        csinfo.main(export_type=(expv if expv else None),
                                     barra_callback=barra_callback,
                                     computer_name=computer,
                                     machine_alias=alias)
@@ -472,14 +618,18 @@ class CSInfoGUI(tk.Tk):
                                 break
                     except Exception:
                         pass
+                    # não escrever logs de ping no painel para manter interface limpa
+                    pass
+                elif kind == 'ping_done':
+                    # limpar indicador visual de atualização
                     try:
-                        self._append_output(f"[ping] {key} -> {status_text}")
+                        self.lbl_ping_status.configure(text='')
                     except Exception:
                         pass
                 elif kind == 'done':
                     self._processing = False
                     self._set_controls_state('normal')
-                    self.btn_start.configure(text='Coletar')
+                    self.btn_start.configure(text='Coletar (F3)')
                     self.lbl_progress.configure(text='Pronto')
                     self.progress['value'] = 100
                     if self.last_lines:
@@ -487,7 +637,7 @@ class CSInfoGUI(tk.Tk):
                 elif kind == 'error':
                     self._processing = False
                     self._set_controls_state('normal')
-                    self.btn_start.configure(text='Coletar')
+                    self.btn_start.configure(text='Coletar (F3)')
                     self.lbl_progress.configure(text='Erro')
                     messagebox.showerror('Erro', str(item[1]))
         except queue.Empty:
@@ -500,7 +650,12 @@ class CSInfoGUI(tk.Tk):
             self.after(100, self._process_queue)
 
     def _set_controls_state(self, state='normal'):
-        widgets = [self.ent_computer, self.ent_alias, self.ent_user, self.ent_pass, self.cmb_export, self.btn_save, self.btn_delete, self.btn_export, self.btn_start]
+        # incluir botões que devem ser desabilitados durante processamento
+        widgets = [
+            self.ent_computer, self.ent_alias, self.ent_user, self.ent_pass,
+            getattr(self, 'export_frame', None), self.btn_save, self.btn_delete, self.btn_export,
+            self.btn_start, getattr(self, 'btn_new', None), getattr(self, 'btn_open_folder', None), getattr(self, 'btn_refresh', None)
+        ]
         for w in widgets:
             try:
                 if state == 'disabled':
@@ -527,7 +682,7 @@ class CSInfoGUI(tk.Tk):
             pass
 
     def _update_export_button_state(self):
-        fmt = self.cmb_export.get()
+        fmt = self.export_var.get() if getattr(self, 'export_var', None) is not None else 'pdf'
         enabled = (fmt != 'nenhum' and bool(self.last_lines) and not self._processing)
         try:
             if enabled:
@@ -541,7 +696,7 @@ class CSInfoGUI(tk.Tk):
         if not self.last_lines:
             messagebox.showinfo('Exportar', 'Nenhum dado para exportar')
             return
-        fmt = self.cmb_export.get()
+        fmt = self.export_var.get() if getattr(self, 'export_var', None) is not None else 'pdf'
         alias = (self.ent_alias.get() or '').strip() or None
         comp = (self._last_collection_computer or (self.ent_computer.get() or '').strip() or '')
 
