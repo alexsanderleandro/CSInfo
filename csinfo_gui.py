@@ -124,13 +124,6 @@ class CSInfoGUI(tk.Tk):
         self.ent_alias.pack()
         self.ent_alias.bind('<KeyRelease>', self._on_alias_keyrelease)
 
-        ttk.Label(left, text='Usuário (opcional):').pack(anchor='w', pady=(8, 0))
-        self.ent_user = ttk.Entry(left, width=32)
-        self.ent_user.pack()
-        ttk.Label(left, text='Senha (opcional):').pack(anchor='w', pady=(8, 0))
-        self.ent_pass = ttk.Entry(left, width=32, show='*')
-        self.ent_pass.pack()
-
         btn_fr = ttk.Frame(left)
         btn_fr.pack(pady=8, fill='x')
         self.btn_save = ttk.Button(btn_fr, text='Salvar', command=self.save_selected_or_new_machine)
@@ -138,7 +131,22 @@ class CSInfoGUI(tk.Tk):
         self.btn_delete = ttk.Button(btn_fr, text='Excluir', command=self.delete_selected_machine)
         self.btn_delete.pack(side='left', fill='x', expand=True, padx=(6, 0))
 
+        # separador fino antes das credenciais
+        sep = ttk.Separator(left, orient='horizontal')
+        sep.pack(fill='x', pady=(8, 8))
+
+        # Campos de credenciais movidos para baixo dos botões (rótulos completos)
+        # rótulo de seção
+        ttk.Label(left, text='Administrador da rede', font=('Segoe UI', 9, 'bold'), foreground='#333').pack(anchor='w', pady=(0, 6))
+        ttk.Label(left, text='Usuário administrador da rede:').pack(anchor='w')
+        self.ent_user = ttk.Entry(left, width=32)
+        self.ent_user.pack()
+        ttk.Label(left, text='Senha administrador da rede:').pack(anchor='w', pady=(8, 0))
+        self.ent_pass = ttk.Entry(left, width=32, show='*')
+        self.ent_pass.pack()
+
         ttk.Label(left, text='Exportar como:').pack(anchor='w', pady=(8, 0))
+        # valores internos usados pelo código: 'nenhum', 'txt', 'pdf', 'ambos'
         self.cmb_export = ttk.Combobox(left, values=('nenhum', 'txt', 'pdf', 'ambos'), state='readonly')
         self.cmb_export.current(0)
         self.cmb_export.pack()
