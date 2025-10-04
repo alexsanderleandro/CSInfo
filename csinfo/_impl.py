@@ -9,6 +9,7 @@ do projeto. Foi movida para dentro do pacote para permitir importação limpa
 import socket
 import json
 import tempfile
+import os
 
 # Helper público: credencial padrão usada por run_powershell quando não é passada explicitamente
 def set_default_credential(user, password):
@@ -229,25 +230,54 @@ def run_powershell(cmd, computer_name=None, timeout=20, retries=2, initial_backo
         except Exception:
             credential = None
 
+    # Detectar se o alvo é local (nome corresponde ao hostname/local computername)
+    is_local = False
     if computer_name:
-        # Se foi passada credencial, construir bloco que cria um PSCredential e usa -Credential
+        try:
+            resolved_local = set()
+            try:
+                resolved_local.add(socket.gethostname().lower())
+            except Exception:
+                pass
+            try:
+                env_name = os.environ.get('COMPUTERNAME')
+                if env_name:
+                    resolved_local.add(str(env_name).lower())
+            except Exception:
+                pass
+            resolved_local.update(('localhost', '127.0.0.1', '::1'))
+            is_local = str(computer_name).lower() in {n for n in resolved_local if n}
+        except Exception:
+            is_local = False
+
+    # Construir variantes de comando remoto (serão tentadas ciclicamente nas tentativas)
+    remote_variants = None
+    if computer_name and not is_local:
+        remote_variants = []
         if credential and isinstance(credential, (list, tuple)) and len(credential) == 2:
             user, pwd = credential
-            # escapar aspas simples para PowerShell (duplicar) e proteger NULs
+            # escapar aspas simples para PowerShell (duplicar)
             user_esc = str(user).replace("'", "''")
             pwd_esc = str(pwd).replace("'", "''")
-            cmd = (
-                f"$sec = ConvertTo-SecureString '{pwd_esc}' -AsPlainText -Force; "
-                f"$cred = New-Object System.Management.Automation.PSCredential('{user_esc}',$sec); "
-                f"Invoke-Command -ComputerName {computer_name} -Credential $cred -ScriptBlock {{ {original_cmd} }} -ErrorAction SilentlyContinue"
+            # 1) Tentar Negotiate (NTLM/Kerberos negotiable)
+            remote_variants.append(
+                f"$sec = ConvertTo-SecureString '{pwd_esc}' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential('{user_esc}',$sec); Invoke-Command -ComputerName {computer_name} -Credential $cred -Authentication Negotiate -ScriptBlock {{ {original_cmd} }} -ErrorAction Stop"
+            )
+            # 2) Tentar padrão com credencial (sem explicit Authentication)
+            remote_variants.append(
+                f"$sec = ConvertTo-SecureString '{pwd_esc}' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential('{user_esc}',$sec); Invoke-Command -ComputerName {computer_name} -Credential $cred -ScriptBlock {{ {original_cmd} }} -ErrorAction Stop"
+            )
+            # 3) Tentar via SSL (se configurado)
+            remote_variants.append(
+                f"$sec = ConvertTo-SecureString '{pwd_esc}' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential('{user_esc}',$sec); Invoke-Command -ComputerName {computer_name} -Credential $cred -Authentication Negotiate -UseSSL -ScriptBlock {{ {original_cmd} }} -ErrorAction Stop"
             )
         else:
-            # Adicionar -ComputerName para execução remota sem credencial
-            cmd = f"Invoke-Command -ComputerName {computer_name} -ScriptBlock {{ {original_cmd} }} -ErrorAction SilentlyContinue"
+            # Sem credenciais: tentar Negotiate e padrão
+            remote_variants.append(f"Invoke-Command -ComputerName {computer_name} -ScriptBlock {{ {original_cmd} }} -Authentication Negotiate -ErrorAction Stop")
+            remote_variants.append(f"Invoke-Command -ComputerName {computer_name} -ScriptBlock {{ {original_cmd} }} -ErrorAction Stop")
 
     # Forçar codificação UTF-8 no PowerShell
-    cmd_with_encoding = f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {cmd}"
-    full = ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', cmd_with_encoding]
+    # Note: se remote_variants estiver definido, iremos selecionar uma variante com base na tentativa atual
 
     # Usar credencial default do módulo se credential não foi fornecida
     try:
@@ -319,6 +349,16 @@ def run_powershell(cmd, computer_name=None, timeout=20, retries=2, initial_backo
         attempt += 1
         ts = time.time()
         try:
+            # selecionar comando: se houver variantes remotas, usar uma variante baseada na tentativa atual
+            if remote_variants:
+                idx = min(len(remote_variants)-1, attempt-1)
+                sel_cmd = remote_variants[idx]
+            else:
+                sel_cmd = cmd
+
+            cmd_with_encoding = f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {sel_cmd}"
+            full = ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', cmd_with_encoding]
+
             if os.name == 'nt':
                 creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
                 out = subprocess.check_output(full, stderr=subprocess.STDOUT, text=True, encoding='utf-8', timeout=timeout, creationflags=creationflags)
@@ -649,8 +689,8 @@ def is_domain_computer(computer_name=None):
 def get_office_version(computer_name=None):
     if computer_name:
         # Para máquinas remotas, usar PowerShell para verificar registry
-        cmd = """
-        $apps = Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* -ErrorAction SilentlyContinue | Where-Object {$_.DisplayName -like "*Office*" -or $_.DisplayName -like "*Microsoft 365*"}
+        cmd = r"""
+        $apps = Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* -ErrorAction SilentlyContinue | Where-Object {$_.DisplayName -like "*Office*" -or $_.DisplayName -like "*Microsoft 365*"}
         if ($apps) { ($apps | Select-Object -First 1).DisplayName + " " + ($apps | Select-Object -First 1).DisplayVersion } else { "Não encontrado" }
         """
         return run_powershell(cmd, computer_name=computer_name) or "NÃO OBTIDO"
@@ -1685,6 +1725,9 @@ def organize_pdf_data(lines, computer_name):
 
 def write_pdf_report(path, lines, computer_name):
     """Gera um relatório em PDF com as informações coletadas - idêntico ao TXT"""
+    # Validação simples do caminho: evita passar None para ReportLab
+    if not path:
+        return False
     try:
         from reportlab.platypus import Table, TableStyle, PageTemplate, Frame, Spacer, Paragraph
         from reportlab.lib.enums import TA_LEFT, TA_CENTER
@@ -2025,8 +2068,8 @@ def write_pdf_report(path, lines, computer_name):
         doc.build(story, canvasmaker=NumberedCanvas)
         return True
         
-    except Exception as e:
-        print(f"Erro ao gerar PDF: {e}")
+    except Exception:
+        # Falhar silenciosamente aqui — a chamada chamadora deve lidar com o retorno False
         return False
 
 def check_remote_machine(computer_name):
@@ -2092,7 +2135,7 @@ def is_remote_admin(computer_name=None):
     out = run_powershell(ps, computer_name=computer_name)
     return str(out).strip().lower() in ("true", "1")
 
-def main(export_type=None, barra_callback=None, computer_name=None, include_debug_on_export=False):
+def main(export_type=None, barra_callback=None, computer_name=None, include_debug_on_export=False, machine_alias=None):
     # --- COLETA DE INFORMAÇÕES AVANÇADAS ---
     network_details = get_network_details(computer_name)
     firewall_status = get_firewall_status(computer_name)
@@ -2191,7 +2234,12 @@ def main(export_type=None, barra_callback=None, computer_name=None, include_debu
         spec.loader.exec_module(network_discovery)
         usuario_logado = network_discovery.get_logged_user(machine)
     safe_name = safe_filename(machine)
-    filename = f"Info_maquina_{safe_name}.txt"
+    # Se houver apelido (machine_alias), use o padrão Info_maquina_<apelido>_<nomemaquina>.txt
+    if machine_alias and str(machine_alias).strip():
+        safe_alias = safe_filename(machine_alias)
+        filename = f"Info_maquina_{safe_alias}_{safe_name}.txt"
+    else:
+        filename = f"Info_maquina_{safe_name}.txt"
     path = os.path.join(os.getcwd(), filename)
 
     lines = []

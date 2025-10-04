@@ -1,0 +1,112 @@
+--- CSInfo debug entry ---
+TIMESTAMP_UTC: 2025-10-03T17:52:53.455335Z
+COMMAND: ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $sec = ConvertTo-SecureString \'alecsander\' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential(\'ceosoftwaread\\\\alex\',$sec); Invoke-Command -ComputerName CEOSOFT-059 -Credential $cred -ScriptBlock { \n    $adapters = Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled -eq $true }\n    $out = @()\n    foreach ($a in $adapters) {\n        $ip = $a.IPAddress[0]\n        $gw = $a.DefaultIPGateway[0]\n        $dns = $a.DNSServerSearchOrder -join ", "\n        $mac = $a.MACAddress\n        $desc = $a.Description\n        $out += [PSCustomObject]@{\n            IP = $ip; Gateway = $gw; DNS = $dns; MAC = $mac; Descricao = $desc\n        }\n    }\n    $out | ConvertTo-Json -Compress\n     } -ErrorAction SilentlyContinue']
+COMPUTER: CEOSOFT-059
+TIMEOUT: 60
+DURATION_SECONDS: 4.974783658981323
+RETURN_CODE: 1
+OUTPUT:
+--- CSInfo debug entry ---
+TIMESTAMP_UTC: 2025-10-03T17:52:56.223717Z
+COMMAND: ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $sec = ConvertTo-SecureString \'alecsander\' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential(\'ceosoftwaread\\\\alex\',$sec); Invoke-Command -ComputerName CEOSOFT-059 -Credential $cred -ScriptBlock { \n    try {\n        $profiles = Get-NetFirewallProfile\n        $out = @()\n        foreach ($p in $profiles) {\n            $out += [PSCustomObject]@{\n                Perfil = $p.Name; Ativado = $p.Enabled\n            }\n        }\n        $out | ConvertTo-Json -Compress\n    } catch { "NÃO OBTIDO" }\n     } -ErrorAction SilentlyContinue']
+COMPUTER: CEOSOFT-059
+TIMEOUT: 60
+DURATION_SECONDS: 2.7645821571350098
+RETURN_CODE: 1
+OUTPUT:
+--- CSInfo debug entry ---
+TIMESTAMP_UTC: 2025-10-03T17:52:59.120100Z
+COMMAND: ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $sec = ConvertTo-SecureString \'alecsander\' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential(\'ceosoftwaread\\\\alex\',$sec); Invoke-Command -ComputerName CEOSOFT-059 -Credential $cred -ScriptBlock { \n    try {\n        $session = New-Object -ComObject Microsoft.Update.Session\n        $searcher = $session.CreateUpdateSearcher()\n        $result = $searcher.Search("IsInstalled=0")\n        $count = $result.Updates.Count\n        if ($count -eq 0) { "Nenhuma atualização pendente" }\n        else { "$count atualizações pendentes" }\n    } catch { "NÃO OBTIDO" }\n     } -ErrorAction SilentlyContinue']
+COMPUTER: CEOSOFT-059
+TIMEOUT: 60
+DURATION_SECONDS: 2.886157512664795
+RETURN_CODE: 1
+OUTPUT:
+--- CSInfo debug entry ---
+TIMESTAMP_UTC: 2025-10-03T17:53:02.887667Z
+COMMAND: ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $sec = ConvertTo-SecureString 'alecsander' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential('ceosoftwaread\\\\alex',$sec); Invoke-Command -ComputerName CEOSOFT-059 -Credential $cred -ScriptBlock { \n    Get-Process | Select-Object -First 10 Name,Id,CPU | ConvertTo-Json -Compress\n     } -ErrorAction SilentlyContinue"]
+COMPUTER: CEOSOFT-059
+TIMEOUT: 60
+DURATION_SECONDS: 3.7658166885375977
+RETURN_CODE: 1
+OUTPUT:
+--- CSInfo debug entry ---
+TIMESTAMP_UTC: 2025-10-03T17:53:06.084723Z
+COMMAND: ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $sec = ConvertTo-SecureString \'alecsander\' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential(\'ceosoftwaread\\\\alex\',$sec); Invoke-Command -ComputerName CEOSOFT-059 -Credential $cred -ScriptBlock { \n    $names = @("wuauserv", "WinDefend", "BITS", "Spooler", "LanmanServer", "LanmanWorkstation")\n    $out = @()\n    foreach ($n in $names) {\n        $s = Get-Service -Name $n -ErrorAction SilentlyContinue\n        if ($s) {\n            $out += [PSCustomObject]@{Nome=$s.Name; Status=$s.Status}\n        }\n    }\n    $out | ConvertTo-Json -Compress\n     } -ErrorAction SilentlyContinue']
+COMPUTER: CEOSOFT-059
+TIMEOUT: 60
+DURATION_SECONDS: 3.1957693099975586
+RETURN_CODE: 1
+OUTPUT:
+--- CSInfo debug entry ---
+TIMESTAMP_UTC: 2025-10-03T17:53:11.890139Z
+COMMAND: ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $sec = ConvertTo-SecureString \'alecsander\' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential(\'ceosoftwaread\\\\alex\',$sec); Invoke-Command -ComputerName CEOSOFT-059 -Credential $cred -ScriptBlock { \n    try {\n        $namespace = "root\\\\SecurityCenter2"\n        $firewallProducts = Get-WmiObject -Namespace $namespace -Class FirewallProduct -ErrorAction SilentlyContinue\n        $out = @()\n        foreach ($fw in $firewallProducts) {\n            $out += $fw.displayName\n        }\n        if ($out.Count -gt 0) {\n            $out -join ", "\n        } else {\n            "Windows Firewall (padrão)"\n        }\n    } catch {\n        "NÃO OBTIDO"\n    }\n     } -ErrorAction SilentlyContinue']
+COMPUTER: CEOSOFT-059
+TIMEOUT: 60
+DURATION_SECONDS: 5.803416967391968
+RETURN_CODE: 1
+OUTPUT:
+--- CSInfo debug entry ---
+TIMESTAMP_UTC: 2025-10-03T17:53:14.952983Z
+COMMAND: ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $sec = ConvertTo-SecureString 'alecsander' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential('ceosoftwaread\\\\alex',$sec); Invoke-Command -ComputerName CEOSOFT-059 -Credential $cred -ScriptBlock { Get-CimInstance Win32_Battery | ConvertTo-Json -Compress } -ErrorAction SilentlyContinue"]
+COMPUTER: CEOSOFT-059
+TIMEOUT: 60
+DURATION_SECONDS: 3.0574777126312256
+RETURN_CODE: 1
+OUTPUT:
+--- CSInfo debug entry ---
+TIMESTAMP_UTC: 2025-10-03T17:53:17.617322Z
+COMMAND: ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $sec = ConvertTo-SecureString 'alecsander' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential('ceosoftwaread\\\\alex',$sec); Invoke-Command -ComputerName CEOSOFT-059 -Credential $cred -ScriptBlock { (Get-CimInstance Win32_SystemEnclosure | Select-Object -ExpandProperty ChassisTypes | ConvertTo-Json -Compress) } -ErrorAction SilentlyContinue"]
+COMPUTER: CEOSOFT-059
+TIMEOUT: 60
+DURATION_SECONDS: 2.662360668182373
+RETURN_CODE: 1
+OUTPUT:
+--- CSInfo debug entry ---
+TIMESTAMP_UTC: 2025-10-03T17:53:20.353568Z
+COMMAND: ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $sec = ConvertTo-SecureString 'alecsander' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential('ceosoftwaread\\\\alex',$sec); Invoke-Command -ComputerName CEOSOFT-059 -Credential $cred -ScriptBlock { (Get-CimInstance Win32_OperatingSystem | Select-Object -Property Caption,Version,OSArchitecture | ConvertTo-Json -Compress) } -ErrorAction SilentlyContinue"]
+COMPUTER: CEOSOFT-059
+TIMEOUT: 60
+DURATION_SECONDS: 2.7343227863311768
+RETURN_CODE: 1
+OUTPUT:
+--- CSInfo debug entry ---
+TIMESTAMP_UTC: 2025-10-03T17:53:23.018545Z
+COMMAND: ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $sec = ConvertTo-SecureString \'alecsander\' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential(\'ceosoftwaread\\\\alex\',$sec); Invoke-Command -ComputerName CEOSOFT-059 -Credential $cred -ScriptBlock { \n        try {\n            # Usar slmgr diretamente\n            $slmgrResult = & cscript //nologo C:\\Windows\\System32\\slmgr.vbs /xpr\n            $output = $slmgrResult -join "`n"\n            \n            # Verificar diferentes padrões de texto para ativação\n            if ($output -match "ativada permanentemente|permanently activated|permanently|permanente") {\n                "Ativado"\n            } elseif ($output -match "grace period|período de carência|carência") {\n                "Período de carência"\n            } elseif ($output -match "notification|notificação") {\n                "Período de notificação"\n            } elseif ($output -match "not activated|não ativado|não está ativado") {\n                "Não ativado"\n            } else {\n                # Se não conseguir interpretar, retornar a saída original limpa\n                ($output -replace "`r", "" -replace "`n", " ").Trim()\n            }\n        } catch {\n            try {\n                # Método alternativo usando Get-WmiObject\n                $licenses = Get-WmiObject -Class SoftwareLicensingProduct | Where-Object {\n                    $_.Name -like "*Windows*" -and $_.PartialProductKey -ne $null\n                } | Select-Object -First 1\n                \n                if ($licenses) {\n                    switch ($licenses.LicenseStatus) {\n                        1 { "Ativado" }\n                        0 { "Não licenciado" }\n                        2 { "Período de carência" }\n                        3 { "OOT (Out of Tolerance)" }\n                        4 { "OOB (Out of Box)" }\n                        5 { "Notificação" }\n                        6 { "Carência estendida" }\n                        default { "Status desconhecido: $($licenses.LicenseStatus)" }\n                    }\n                } else {\n                    "Nenhuma licença encontrada"\n                }\n            } catch {\n                "Erro na verificação"\n            }\n        }\n         } -ErrorAction SilentlyContinue']
+COMPUTER: CEOSOFT-059
+TIMEOUT: 60
+DURATION_SECONDS: 2.663116455078125
+RETURN_CODE: 1
+OUTPUT:
+--- CSInfo debug entry ---
+TIMESTAMP_UTC: 2025-10-03T17:53:25.748325Z
+COMMAND: ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $sec = ConvertTo-SecureString \'alecsander\' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential(\'ceosoftwaread\\\\alex\',$sec); Invoke-Command -ComputerName CEOSOFT-059 -Credential $cred -ScriptBlock { \n        $apps = Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* -ErrorAction SilentlyContinue | Where-Object {$_.DisplayName -like "*Office*" -or $_.DisplayName -like "*Microsoft 365*"}\n        if ($apps) { ($apps | Select-Object -First 1).DisplayName + " " + ($apps | Select-Object -First 1).DisplayVersion } else { "Não encontrado" }\n         } -ErrorAction SilentlyContinue']
+COMPUTER: CEOSOFT-059
+TIMEOUT: 60
+DURATION_SECONDS: 2.7236685752868652
+RETURN_CODE: 1
+OUTPUT:
+--- CSInfo debug entry ---
+TIMESTAMP_UTC: 2025-10-03T17:53:28.433315Z
+COMMAND: ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $sec = ConvertTo-SecureString \'alecsander\' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential(\'ceosoftwaread\\\\alex\',$sec); Invoke-Command -ComputerName CEOSOFT-059 -Credential $cred -ScriptBlock { \n        try {\n            # Verificar Office através do registro\n            $officeApps = @("Word", "Excel", "PowerPoint", "Outlook")\n            $activated = $false\n            \n            foreach ($app in $officeApps) {\n                try {\n                    $comObject = New-Object -ComObject "$app.Application"\n                    if ($comObject) {\n                        $activated = $true\n                        $comObject.Quit()\n                        break\n                    }\n                } catch {}\n            }\n            \n            if ($activated) {\n                "Ativado"\n            } else {\n                # Método alternativo: verificar chaves de ativação no registro\n                $regPaths = @(\n                    "HKLM:\\SOFTWARE\\Microsoft\\Office\\*\\Registration",\n                    "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Office\\*\\Registration"\n                )\n                \n                $foundActivation = $false\n                foreach ($path in $regPaths) {\n                    try {\n                        $items = Get-ChildItem $path -ErrorAction SilentlyContinue\n                        if ($items) {\n                            $foundActivation = $true\n                            break\n                        }\n                    } catch {}\n                }\n                \n                if ($foundActivation) {\n                    "Possivelmente ativado"\n                } else {\n                    "Não detectado"\n                }\n            }\n        } catch {\n            "NÃO OBTIDO"\n        }\n         } -ErrorAction SilentlyContinue']
+COMPUTER: CEOSOFT-059
+TIMEOUT: 60
+DURATION_SECONDS: 2.683516025543213
+RETURN_CODE: 1
+OUTPUT:
+--- CSInfo debug entry ---
+TIMESTAMP_UTC: 2025-10-03T17:53:31.125844Z
+COMMAND: ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $sec = ConvertTo-SecureString \'alecsander\' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential(\'ceosoftwaread\\\\alex\',$sec); Invoke-Command -ComputerName CEOSOFT-059 -Credential $cred -ScriptBlock { \n    $sqlInstances = @()\n    \n    # Buscar serviços do SQL Server\n    try {\n        $services = Get-WmiObject -Class Win32_Service -Filter "Name LIKE \'%SQL%\'" -ErrorAction SilentlyContinue\n        $sqlServices = $services | Where-Object { $_.Name -match "MSSQL\\$" -or $_.Name -eq "MSSQLSERVER" }\n        \n        foreach ($service in $sqlServices) {\n            $instanceName = if ($service.Name -eq "MSSQLSERVER") { "Default" } else { $service.Name -replace "MSSQL\\$", "" }\n            $status = $service.State\n            \n            # Tentar obter versão do registro\n            $version = ""\n            try {\n                if ($instanceName -eq "Default") {\n                    $regPath = "HKLM:\\SOFTWARE\\Microsoft\\Microsoft SQL Server\\MSSQL*\\MSSQLServer\\CurrentVersion"\n                } else {\n                    $regPath = "HKLM:\\SOFTWARE\\Microsoft\\Microsoft SQL Server\\MSSQL*\\MSSQLServer\\CurrentVersion"\n                }\n                \n                $versionKeys = Get-ChildItem "HKLM:\\SOFTWARE\\Microsoft\\Microsoft SQL Server\\" -ErrorAction SilentlyContinue | \n                               Where-Object { $_.Name -match "MSSQL\\d+\\." }\n                \n                foreach ($key in $versionKeys) {\n                    $currentVersionPath = Join-Path $key.PSPath "MSSQLServer\\CurrentVersion"\n                    if (Test-Path $currentVersionPath) {\n                        $versionReg = Get-ItemProperty $currentVersionPath -ErrorAction SilentlyContinue\n                        if ($versionReg.CurrentVersion) {\n                            $version = $versionReg.CurrentVersion\n                            break\n                        }\n                    }\n                }\n            } catch {}\n            \n            $sqlInstances += [PSCustomObject]@{\n                Instance = $instanceName\n                Status = $status\n                Version = $version\n            }\n        }\n    } catch {}\n    \n    # Se não encontrou serviços, tentar pelo registro\n    if ($sqlInstances.Count -eq 0) {\n        try {\n            $regKeys = Get-ChildItem "HKLM:\\SOFTWARE\\Microsoft\\Microsoft SQL Server\\" -ErrorAction SilentlyContinue | \n                       Where-Object { $_.Name -match "MSSQL\\d+\\." }\n            \n            foreach ($key in $regKeys) {\n                $setupPath = Join-Path $key.PSPath "Setup"\n                if (Test-Path $setupPath) {\n                    $setup = Get-ItemProperty $setupPath -ErrorAction SilentlyContinue\n                    if ($setup.SqlProgramDir) {\n                        $sqlInstances += [PSCustomObject]@{\n                            Instance = $setup.Edition\n                            Status = "Unknown"\n                            Version = $setup.Version\n                        }\n                    }\n                }\n            }\n        } catch {}\n    }\n    \n    $sqlInstances | ConvertTo-Json -Compress\n     } -ErrorAction SilentlyContinue']
+COMPUTER: CEOSOFT-059
+TIMEOUT: 60
+DURATION_SECONDS: 2.6886868476867676
+RETURN_CODE: 1
+OUTPUT:
+--- CSInfo debug entry ---
+TIMESTAMP_UTC: 2025-10-03T17:53:33.790100Z
+COMMAND: ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $sec = ConvertTo-SecureString \'alecsander\' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential(\'ceosoftwaread\\\\alex\',$sec); Invoke-Command -ComputerName CEOSOFT-059 -Credential $cred -ScriptBlock { \n    $antivirusList = @()\n    \n    # Método 1: Windows Security Center (funciona no Windows 10/11)\n    try {\n        $namespace = "root\\SecurityCenter2"\n        $antivirusProducts = Get-WmiObject -Namespace $namespace -Class AntiVirusProduct -ErrorAction SilentlyContinue\n        \n        foreach ($av in $antivirusProducts) {\n            $name = $av.displayName\n            $state = $av.productState\n            \n            # Decodificar o estado do produto\n            $hex = [Convert]::ToString($state, 16).PadLeft(6, "0")\n            $s2 = $hex.Substring(2,2) \n            \n            $enabled = "Desconhecido"\n            \n            # Verificar se está ativado (bit 4 e 5)\n            if ([Convert]::ToInt32($s2, 16) -band 0x10) {\n                $enabled = "Ativado"\n            } elseif ([Convert]::ToInt32($s2, 16) -band 0x00) {\n                $enabled = "Desativado"\n            }\n            \n            $antivirusList += [PSCustomObject]@{\n                Name = $name\n                Enabled = $enabled\n            }\n        }\n    } catch {}\n    \n    # Método 2: Verificar pelo registro (programas instalados)\n    if ($antivirusList.Count -eq 0) {\n        try {\n            $uninstallKeys = @(\n                "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*",\n                "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*"\n            )\n            \n            $antivirusNames = @(\n                "Avast", "AVG", "Kaspersky", "Norton", "McAfee", "Bitdefender", \n                "ESET", "Trend Micro", "F-Secure", "Panda", "Sophos", "Malwarebytes",\n                "Windows Defender", "Microsoft Defender", "Symantec", "Avira",\n                "Quick Heal", "Comodo", "360 Total Security", "Baidu Antivirus"\n            )\n            \n            foreach ($key in $uninstallKeys) {\n                $programs = Get-ItemProperty $key -ErrorAction SilentlyContinue\n                foreach ($program in $programs) {\n                    $displayName = $program.DisplayName\n                    if ($displayName) {\n                        foreach ($avName in $antivirusNames) {\n                            if ($displayName -like "*$avName*") {\n                                $antivirusList += [PSCustomObject]@{\n                                    Name = $displayName\n                                    Enabled = "Instalado"\n                                }\n                                break\n                            }\n                        }\n                    }\n                }\n            }\n        } catch {}\n    }\n    \n    # Método 3: Verificar Windows Defender especificamente\n    if ($antivirusList.Count -eq 0) {\n        try {\n            $defenderStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue\n            if ($defenderStatus) {\n                $enabled = if ($defenderStatus.RealTimeProtectionEnabled) { "Ativado" } else { "Desativado" }\n                \n                $antivirusList += [PSCustomObject]@{\n                    Name = "Windows Defender"\n                    Enabled = $enabled\n                }\n            }\n        } catch {}\n    }\n    \n    # Se nada foi encontrado, verificar se há pelo menos o Windows Defender básico\n    if ($antivirusList.Count -eq 0) {\n        try {\n            $defenderService = Get-Service -Name "WinDefend" -ErrorAction SilentlyContinue\n            if ($defenderService) {\n                $status = if ($defenderService.Status -eq "Running") { "Em execução" } else { $defenderService.Status }\n                $antivirusList += [PSCustomObject]@{\n                    Name = "Windows Defender (Serviço)"\n                    Enabled = $status\n                }\n            }\n        } catch {}\n    }\n    \n    # Remover duplicatas baseado no nome\n    $uniqueList = @()\n    $seenNames = @()\n    foreach ($av in $antivirusList) {\n        $cleanName = $av.Name -replace \'\\s*\\d+.*$\', \'\' -replace \'\\s*\\(.*\\)\', \'\' -replace \'\\s+\', \' \'\n        $cleanName = $cleanName.Trim()\n        \n        if ($seenNames -notcontains $cleanName) {\n            $seenNames += $cleanName\n            $uniqueList += [PSCustomObject]@{\n                Name = $cleanName\n                Enabled = $av.Enabled\n            }\n        }\n    }\n    \n    $uniqueList | ConvertTo-Json -Compress\n     } -ErrorAction SilentlyContinue']
+COMPUTER: CEOSOFT-059
+TIMEOUT: 60
+DURATION_SECONDS: 2.662630319595337
+RETURN_CODE: 1
+OUTPUT:

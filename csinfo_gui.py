@@ -1,613 +1,567 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
-from tkinter.scrolledtext import ScrolledText
+"""GUI simples para csinfo.
+
+Comportamento principal:
+- Ao iniciar coleta, todos os campos de entrada são desabilitados.
+- A coleta roda em uma thread de background chamando `csinfo.main(...)`.
+- Saída incremental (linhas) enviada por `barra_callback` é exibida progressivamente.
+- Ao terminar (ou erro), os campos são reabilitados.
+"""
+
 import threading
-import os
+import queue
+import tkinter as tk
+from tkinter import ttk
+from tkinter.scrolledtext import ScrolledText
 import csinfo
-from csinfo import main as csinfo_main
-import importlib.util, sys
+import time
+import json
+import os
 import subprocess
+import pathlib
+import sys
 
 
-def resource_path(rel_path: str) -> str:
-    """Resolve um caminho relativo ao diretório do script ou ao bundle do PyInstaller."""
-    if getattr(sys, 'frozen', False):
-        # PyInstaller cria um temp folder e coloca o path em _MEIPASS
-        base = sys._MEIPASS
-    else:
-        base = os.path.dirname(__file__)
-    return os.path.join(base, rel_path)
+class CSInfoGUI(tk.Tk):
+	def __init__(self):
+		super().__init__()
+		self.title('CSInfo - Coletor')
+		self.geometry('800x600')
 
-# --------- Função para configurar estilos visuais ---------
-def estilo_botoes():
-    style = ttk.Style()
-    style.theme_use('default')
-    style.configure('Rounded.TButton',
-                   font=('Segoe UI', 10, 'bold'),
-                   padding=8,
-                   borderwidth=0,
-                   relief='flat',
-                   foreground='#fff',
-                   background='#1976D2',
-                   focusthickness=3,
-                   focuscolor='none')
-    style.map('Rounded.TButton',
-              background=[('active', '#1565C0'), ('disabled', '#b0b0b0')])
-    # Botão Exportar - verde
-    style.configure('Export.TButton',
-                   font=('Segoe UI', 10, 'bold'),
-                   padding=8,
-                   borderwidth=0,
-                   relief='flat',
-                   foreground='#fff',
-                   background='#43A047')
-    style.map('Export.TButton',
-              background=[('active', '#388E3C'), ('disabled', '#b0b0b0')])
-    # Botão Sair - vermelho
-    style.configure('Exit.TButton',
-                   font=('Segoe UI', 10, 'bold'),
-                   padding=8,
-                   borderwidth=0,
-                   relief='flat',
-                   foreground='#fff',
-                   background='#E53935')
-    style.map('Exit.TButton',
-              background=[('active', '#B71C1C'), ('disabled', '#b0b0b0')])
-    # Radiobutton circular
-    style.configure('Custom.TRadiobutton',
-                   indicatorcolor='#1976D2',
-                   indicatordiameter=14,
-                   indicatorsize=14,
-                   font=('Segoe UI', 10),
-                   padding=4)
-    style.map('Custom.TRadiobutton',
-              indicatorcolor=[('selected', '#1976D2'), ('active', '#1565C0')])
+		# debug mode controllable via env CSINFO_GUI_DEBUG=1
+		self.debug = os.environ.get('CSINFO_GUI_DEBUG', '').lower() in ('1', 'true', 'yes')
+
+		self._create_widgets()
+		self._layout_widgets()
+
+		# fila para comunicar da thread worker -> mainloop
+		self.queue = queue.Queue()
+		self.worker_thread = None
+		self.controls = []
+
+		# iniciar loop de consumo de fila
+		self.after(100, self._process_queue)
+
+	def _create_widgets(self):
+		self.frm_top = ttk.Frame(self)
+
+		# Frame para lista de máquinas e ações
+		self.frm_machines = ttk.Frame(self)
+		# agora exibimos também o nome da máquina na lista
+		self.tree = ttk.Treeview(self.frm_machines, columns=('name','alias','status'), show='headings', selectmode='browse', height=8)
+		self.tree.heading('name', text='Máquina')
+		self.tree.heading('alias', text='Apelido')
+		self.tree.heading('status', text='Estado')
+		self.tree.column('name', width=220)
+		self.tree.column('alias', width=150)
+		self.tree.column('status', width=100, anchor='center')
+		# configurar tags para colorir o estado de forma consistente
+		try:
+			self.tree.tag_configure('online', foreground='green')
+			self.tree.tag_configure('offline', foreground='gray')
+		except Exception:
+			pass
+		self.tree_scroll = ttk.Scrollbar(self.frm_machines, orient='vertical', command=self.tree.yview)
+		self.tree.configure(yscrollcommand=self.tree_scroll.set)
+
+		# botões da rotina de máquinas
+		self.frm_machine_buttons = ttk.Frame(self.frm_machines)
+		self.btn_load = ttk.Button(self.frm_machine_buttons, text='Carregar', command=self.load_selected_machine_into_fields)
+		self.btn_save_machine = ttk.Button(self.frm_machine_buttons, text='Salvar', command=self.save_selected_or_new_machine)
+		self.btn_delete = ttk.Button(self.frm_machine_buttons, text='Excluir', command=self.delete_selected_machine)
+		self.btn_open = ttk.Button(self.frm_machine_buttons, text='Abrir pasta', command=self.open_machine_json_folder)
+		self.btn_refresh = ttk.Button(self.frm_machine_buttons, text='Refresh', command=self.refresh_machine_statuses)
 
 
-# --------- Classe principal adaptada ---------
-class CSInfoApp(tk.Tk):
-    def bloquear_fechar(self):
-        pass  # Ignora o evento de fechar
-    def desbloquear_fechar(self):
-        self.protocol("WM_DELETE_WINDOW", self.quit)
+		self.lbl_computer = ttk.Label(self.frm_top, text='Nome da máquina (opcional):')
+		# Nome da máquina deve ser centralizado e em caixa alta
+		self.ent_computer = ttk.Entry(self.frm_top, justify='center')
+		self.ent_computer.bind('<KeyRelease>', lambda e: self._on_name_keyrelease(e))
 
-    def __init__(self):
-        super().__init__()
-        # Incluir versão do pacote no título
-        try:
-            ver = getattr(csinfo, '__version__', None)
-            if ver:
-                self.title(f"CSInfo – Inventário de Hardware e Software  v{ver}")
-            else:
-                self.title("CSInfo – Inventário de Hardware e Software")
-        except Exception:
-            self.title("CSInfo – Inventário de Hardware e Software")
-        self.geometry("900x650")
-        self.configure(bg='#f4f6f9')
-        self.resizable(False, False)
-        estilo_botoes()
-        # Tenta configurar o ícone do aplicativo (assets/ico.png)
-        try:
-            self.set_app_icon()
-        except Exception:
-            pass
-        self.criar_layout()
+		self.lbl_alias = ttk.Label(self.frm_top, text='Apelido para arquivo (opcional):')
+		# apelido deve ser caixa alta e centralizado
+		self.ent_alias = ttk.Entry(self.frm_top, justify='center')
+		self.ent_alias.bind('<KeyRelease>', lambda e: self._on_alias_keyrelease(e))
 
-    def set_app_icon(self):
-        """Configura o ícone da aplicação. Usa .ico no Windows ou PNG via Pillow/tk.PhotoImage como fallback."""
-        # Caminho relativo ao projeto
-        png_path = resource_path(os.path.join('assets', 'ico.png'))
-        ico_path = resource_path(os.path.join('assets', 'app.ico'))
-        # Se existir um .ico preferimos usá-lo no Windows
-        try:
-            if os.path.exists(ico_path) and os.name == 'nt':
-                self.iconbitmap(ico_path)
-                return
-        except Exception:
-            pass
+		# campos de credenciais (adicionados conforme solicitado)
+		self.lbl_user = ttk.Label(self.frm_top, text='Usuário:')
+		self.ent_user = ttk.Entry(self.frm_top)
+		self.lbl_pass = ttk.Label(self.frm_top, text='Senha:')
+		self.ent_pass = ttk.Entry(self.frm_top, show='*')
 
-        # Se não existir .ico mas houver o PNG, tentar gerar app.ico automaticamente (Windows)
-        if os.path.exists(png_path):
-            # Tentar criar o .ico a partir do PNG usando Pillow, se possível
-            # Regenerar o .ico se ele não existir ou se o PNG for mais novo
-            regenerate_ico = False
-            try:
-                if not os.path.exists(ico_path):
-                    regenerate_ico = True
-                else:
-                    if os.path.exists(png_path) and os.path.getmtime(png_path) > os.path.getmtime(ico_path):
-                        regenerate_ico = True
-            except Exception:
-                regenerate_ico = regenerate_ico or False
+		self.lbl_export = ttk.Label(self.frm_top, text='Formato de exportação:')
+		self.cmb_export = ttk.Combobox(self.frm_top, values=('nenhum','txt','pdf','ambos'), state='readonly')
+		self.cmb_export.set('nenhum')
 
-            if regenerate_ico and os.name == 'nt':
-                try:
-                    from PIL import Image
-                    # Garantir diretório de destino
-                    ico_dir = os.path.dirname(ico_path)
-                    if ico_dir and not os.path.exists(ico_dir):
-                        os.makedirs(ico_dir, exist_ok=True)
-                    img = Image.open(png_path)
-                    # Converter para RGBA caso necessário
-                    if img.mode not in ('RGBA', 'RGB'):
-                        img = img.convert('RGBA')
-                    # Salvar ícone com múltiplas resoluções para melhor compatibilidade no Windows
-                    sizes = [(16, 16), (32, 32), (48, 48), (256, 256)]
-                    img.save(ico_path, format='ICO', sizes=sizes)
-                except Exception:
-                    # Se falhar, apenas seguimos para os fallbacks
-                    pass
+		# checkbox de debug removido conforme solicitado
 
-            # Tenta usar Pillow + ImageTk para aplicar o PNG como iconphoto (cross-platform)
-            try:
-                from PIL import Image, ImageTk
-                img = Image.open(png_path)
-                photo = ImageTk.PhotoImage(img)
-                # wm_iconphoto aplica ao ícone da janela em muitas plataformas
-                self.wm_iconphoto(True, photo)
-                # manter referência para evitar garbage collection
-                self._icon_photo = photo
-                # Se geramos o .ico e estamos no Windows, também aplicá-lo como iconbitmap
-                try:
-                    if os.path.exists(ico_path) and os.name == 'nt':
-                        self.iconbitmap(ico_path)
-                except Exception:
-                    pass
-                return
-            except Exception:
-                pass
+		self.btn_start = ttk.Button(self.frm_top, text='Coletar', command=self.start_collection)
+		self.btn_clear = ttk.Button(self.frm_top, text='Limpar', command=self.clear_output)
 
-        # Fallback: tentar usar PhotoImage nativo do Tkinter (suporta PNG em builds recentes)
-        try:
-            if os.path.exists(png_path):
-                photo = tk.PhotoImage(file=png_path)
-                self.wm_iconphoto(True, photo)
-                self._icon_photo = photo
-                return
-        except Exception:
-            pass
+		self.progress = ttk.Progressbar(self, orient='horizontal', length=400, mode='determinate')
+		self.lbl_progress = ttk.Label(self, text='Pronto')
 
-        # Último recurso: se existir o app.ico e estivermos no Windows, tentar aplicá-lo
-        try:
-            if os.path.exists(ico_path) and os.name == 'nt':
-                self.iconbitmap(ico_path)
-                return
-        except Exception:
-            pass
+		# área de saída: mantida desabilitada por padrão (escrita via código)
+		self.txt_output = ScrolledText(self, wrap='word', state='disabled')
 
-    def criar_layout(self):
-        # Menu removido (Ajuda/Sobre) a pedido — nada a configurar aqui
-        # Título
-        self.label = tk.Label(self, text="CSInfo – Inventário de Hardware e Software", font=("Segoe UI", 16, "bold"), fg="#003366", bg="#f4f6f9")
-        self.label.pack(pady=(20, 10))
+		# lista completa de controles que devem ser bloqueados
+		# incluir campos de credenciais para que sejam desabilitados durante processamento
+		self.controls = [self.ent_computer, self.ent_alias, self.ent_user, self.ent_pass, self.cmb_export, self.btn_start, self.btn_clear]
 
-        # Frame de entrada
-        frame_entrada = tk.Frame(self, bg='#f4f6f9')
-        frame_entrada.pack(pady=(10, 5))
-        label_machine = tk.Label(frame_entrada, text="Nome da máquina:", font=("Segoe UI", 10, 'normal'), fg='#333', bg='#f4f6f9')
-        label_machine.grid(row=0, column=0, padx=(0, 8), sticky='e')
+		# dados em memória
+		self.machine_list = []
+		# caminho do arquivo json
+		self.machine_json_path = self.get_machine_json_path()
+		# carregar lista ao iniciar
+		self.load_machine_list()
+		# iniciar ping inicial (background)
+		self.refresh_machine_statuses()
 
-        # Campo de input seguido pelo botão Iniciar (botão à direita)
-        self.machine_var = tk.StringVar()
-        self.machine_entry = tk.Entry(frame_entrada, textvariable=self.machine_var, font=("Segoe UI", 10), width=40, relief='solid', justify='center')
-        self.machine_entry.grid(row=0, column=1, sticky='w')
-        # Permitir que a coluna do input cresça se necessário
-        frame_entrada.grid_columnconfigure(1, weight=1)
+	def _layout_widgets(self):
+		self.frm_top.pack(fill='x', padx=10, pady=8)
 
-        # Botão Iniciar posicionado à direita do campo de input
-        self.start_btn = ttk.Button(frame_entrada, text="▶ Iniciar", style='Rounded.TButton', command=self.start_process)
-        self.start_btn.grid(row=0, column=2, padx=(8, 0))
+		# posicionar frame de máquinas logo abaixo do topo
+		self.frm_machines.pack(fill='x', padx=10, pady=(0,8))
+		self.tree.pack(side='left', fill='x', expand=True)
+		self.tree_scroll.pack(side='left', fill='y')
+		self.frm_machine_buttons.pack(side='left', padx=8)
+		self.btn_load.pack(fill='x', pady=2)
+		self.btn_save_machine.pack(fill='x', pady=2)
+		self.btn_delete.pack(fill='x', pady=2)
+		self.btn_refresh.pack(fill='x', pady=2)
+		self.btn_open.pack(fill='x', pady=2)
 
-        # Botão para abrir modal de credenciais (pequeno) à esquerda do Start
-        self.creds_btn = ttk.Button(frame_entrada, text="Credenciais...", command=self.open_credentials_modal)
-        self.creds_btn.grid(row=0, column=3, padx=(8,0))
+		self.lbl_computer.grid(row=0, column=0, sticky='w')
+		self.ent_computer.grid(row=0, column=1, sticky='ew', padx=6)
+		self.lbl_alias.grid(row=0, column=2, sticky='w', padx=(12,0))
+		self.ent_alias.grid(row=0, column=3, sticky='ew', padx=6)
 
-        self.placeholder = "Deixe em branco para máquina local"
-        self.machine_entry.insert(0, self.placeholder)
-        self.machine_entry.config(fg='#888', font=('Segoe UI', 9, 'italic'), justify='center')
-        def limitar_input_e_maiusculo(*args):
-            valor = self.machine_var.get()
-            valor_maiusculo = valor.upper()
-            if len(valor_maiusculo) > 40:
-                valor_maiusculo = valor_maiusculo[:40]
-            if valor != valor_maiusculo:
-                self.machine_var.set(valor_maiusculo)
-            elif len(valor_maiusculo) > 40:
-                self.machine_var.set(valor_maiusculo)
-        self.machine_var.trace_add('write', limitar_input_e_maiusculo)
-        def on_focus_in(event):
-            if self.machine_entry.get() == self.placeholder:
-                self.machine_entry.delete(0, tk.END)
-                self.machine_entry.config(fg='#222', font=('Segoe UI', 10), justify='center')
-        def on_focus_out(event):
-            if not self.machine_entry.get():
-                self.machine_entry.insert(0, self.placeholder)
-                self.machine_entry.config(fg='#888', font=('Segoe UI', 9, 'italic'), justify='center')
-                self.machine_var.set("")  # Garante que a variável não fique com o placeholder
-            elif self.machine_entry.get() == self.placeholder:
-                self.machine_var.set("")  # Garante que a variável não fique com o placeholder
-        self.machine_entry.bind("<FocusIn>", on_focus_in)
-        self.machine_entry.bind("<FocusOut>", on_focus_out)
+		# campos de credenciais em nova linha
+		self.lbl_user.grid(row=1, column=2, sticky='w', padx=(12,0))
+		self.ent_user.grid(row=1, column=3, sticky='ew', padx=6)
+		self.lbl_pass.grid(row=1, column=0, sticky='w')
+		self.ent_pass.grid(row=1, column=1, sticky='ew', padx=6)
 
-    # Removido label 'Gerado por' do formulário — fica apenas nos relatórios
-    # ...existing code...
+		self.lbl_export.grid(row=2, column=0, sticky='w', pady=(8,0))
+		self.cmb_export.grid(row=2, column=1, sticky='w', pady=(8,0))
+		# chk_debug removido
 
-    # ...o botão Iniciar agora fica dentro do frame_entrada ao lado do input...
+		self.btn_start.grid(row=2, column=0, pady=10)
+		self.btn_clear.grid(row=2, column=1, pady=10)
 
-        # Área de resultados
-        frame_result = tk.Frame(self, bg='#f4f6f9')
-        frame_result.pack(pady=(5, 10))
-        self.info_text = ScrolledText(frame_result, width=110, height=20, font=('Consolas', 9),
-                                      bg='white', fg='#222', relief='solid', borderwidth=1)
-        self.info_text.pack()
-        self.info_text.config(state=tk.DISABLED)  # Sempre inicia como somente leitura
-        # Remove qualquer binding que permita digitação
-        self.info_text.bind('<Key>', lambda e: 'break')
-        self.info_text.bind('<Button-1>', lambda e: 'break')
+		# permitir que as colunas 1 e 3 expandam
+		self.frm_top.columnconfigure(1, weight=1)
+		self.frm_top.columnconfigure(3, weight=1)
 
-        # Barra de progresso / mensagem
-        self.progress_label = tk.Label(self, text="", font=('Segoe UI', 10, 'bold'), fg='#1976D2', bg='#f4f6f9')
-        self.progress_label.pack(pady=(5, 0))
+		self.progress.pack(fill='x', padx=10, pady=(0,4))
+		self.lbl_progress.pack(anchor='w', padx=12)
+		self.txt_output.pack(fill='both', expand=True, padx=10, pady=8)
 
-        # Progressbar visual (0% - 100%)
-        self.progressbar = ttk.Progressbar(self, orient='horizontal', length=600, mode='determinate')
-        self.progressbar.pack(pady=(4, 6))
-        self.progress_percent_label = tk.Label(self, text="", font=('Segoe UI', 9), fg='#333', bg='#f4f6f9')
-        self.progress_percent_label.pack()
+		# bind seleção na tree
+		# ao selecionar uma linha, carregar automaticamente os campos
+		self.tree.bind('<<TreeviewSelect>>', lambda e: self.load_selected_machine_into_fields())
 
-        # Rodapé: Exportação
-        frame_export = tk.Frame(self, bg='#f4f6f9')
-        frame_export.pack(pady=(15, 5))
-        label_export = tk.Label(frame_export, text="Exportar resultado:", font=('Segoe UI', 10, 'normal'), fg='#333', bg='#f4f6f9')
-        label_export.grid(row=0, column=0, padx=(0, 8))
-        self.export_var = tk.StringVar(value='txt')
-        self.radio_txt = tk.Radiobutton(frame_export, text='TXT', variable=self.export_var, value='txt', font=('Segoe UI', 10), bg='#f4f6f9', activebackground='#e3e6ea', selectcolor='white', highlightthickness=0)
-        self.radio_pdf = tk.Radiobutton(frame_export, text='PDF', variable=self.export_var, value='pdf', font=('Segoe UI', 10), bg='#f4f6f9', activebackground='#e3e6ea', selectcolor='white', highlightthickness=0)
-        self.radio_ambos = tk.Radiobutton(frame_export, text='Ambos', variable=self.export_var, value='ambos', font=('Segoe UI', 10), bg='#f4f6f9', activebackground='#e3e6ea', selectcolor='white', highlightthickness=0)
-        self.radio_txt.grid(row=0, column=1, padx=5)
-        self.radio_pdf.grid(row=0, column=2, padx=5)
-        self.radio_ambos.grid(row=0, column=3, padx=5)
-        # Checkbox para incluir diagnóstico (log de debug)
-        self.include_debug_var = tk.BooleanVar(value=False)
-        self.chk_debug = tk.Checkbutton(frame_export, text='Incluir diagnóstico', variable=self.include_debug_var, bg='#f4f6f9')
-        self.chk_debug.grid(row=0, column=4, padx=(12,0))
+	def _set_controls_state(self, state='disabled'):
+		for w in self.controls:
+			try:
+				w.configure(state=state)
+			except Exception:
+				try:
+					# alguns widgets usam 'variable' e não aceitam state change; ignorar
+					pass
+				except Exception:
+					pass
 
-        # Botões Exportar e Sair
-        frame_botoes = tk.Frame(self, bg='#f4f6f9')
-        frame_botoes.pack(pady=(10, 20))
-        self.export_btn = ttk.Button(frame_botoes, text="💾 Exportar", style='Export.TButton', command=self.exportar)
-        self.export_btn.grid(row=0, column=0, padx=10)
-        self.exit_btn = ttk.Button(frame_botoes, text="✖ Sair", style='Exit.TButton', command=self.quit)
-        self.exit_btn.grid(row=0, column=1, padx=10)
+	def clear_output(self):
+		self.txt_output.configure(state='normal')
+		self.txt_output.delete('1.0', tk.END)
+		self.txt_output.configure(state='disabled')
 
-        # Inicialmente, desabilita botões de exportação
-        self.export_btn.config(state=tk.DISABLED)
-        self.radio_txt.config(state=tk.DISABLED)
-        self.radio_pdf.config(state=tk.DISABLED)
-        self.radio_ambos.config(state=tk.DISABLED)
+	def _on_name_keyrelease(self, event):
+		# converte texto para caixa alta mantendo a posição do cursor
+		w = event.widget
+		try:
+			pos = w.index(tk.INSERT)
+			text = w.get()
+			up = text.upper()
+			if text != up:
+				w.delete(0, tk.END)
+				w.insert(0, up)
+				# restaurar cursor: limitar à lenght
+				try:
+					newpos = min(pos, len(up))
+					w.icursor(newpos)
+				except Exception:
+					pass
+		except Exception:
+			pass
 
-        # Rodapé centralizado com versão
-        # Rodapé sem versão do app (apenas o nome da empresa)
-        rodape_text = "CEOsoftware Sistemas"
-        # Rodapé centralizado
-        rodape = tk.Label(self, text=rodape_text, font=("Segoe UI", 8), fg="#666", bg="#f4f6f9")
-        rodape.pack(side=tk.BOTTOM, pady=(0, 6))
-        rodape.configure(anchor="center", justify="center")
+	def _on_alias_keyrelease(self, event):
+		# converte alias para caixa alta mantendo cursor
+		w = event.widget
+		try:
+			pos = w.index(tk.INSERT)
+			text = w.get()
+			up = text.upper()
+			if text != up:
+				w.delete(0, tk.END)
+				w.insert(0, up)
+				try:
+					newpos = min(pos, len(up))
+					w.icursor(newpos)
+				except Exception:
+					pass
+		except Exception:
+			pass
 
-    def show_about(self):
-        try:
-            ver = getattr(csinfo, '__version__', 'desconhecida')
-            info = f"CSInfo — versão {ver}\n\nGerado por CEOsoftware Sistemas"
-        except Exception:
-            info = "CSInfo — versão desconhecida"
-        messagebox.showinfo("Sobre CSInfo", info)
+	def get_machine_json_path(self):
+		# usar AppData\Roaming\CSInfo\machines_history.json no Windows (histórico conforme solicitado)
+		appdata = os.environ.get('APPDATA') or os.path.expanduser('~')
+		dirpath = os.path.join(appdata, 'CSInfo')
+		os.makedirs(dirpath, exist_ok=True)
+		return os.path.join(dirpath, 'machines_history.json')
 
-    def open_credentials_modal(self):
-        """Abre um modal simples para aceitar DOMAIN\\user e senha. Define credencial padrão em csinfo."""
-        try:
-            modal = tk.Toplevel(self)
-            modal.title("Credenciais remotas")
-            modal.geometry("420x180")
-            modal.transient(self)
-            modal.grab_set()
+	def load_machine_list(self):
+		try:
+			if os.path.exists(self.machine_json_path):
+				with open(self.machine_json_path, 'r', encoding='utf-8') as fh:
+					self.machine_list = json.load(fh) or []
+			else:
+				self.machine_list = []
+		except Exception:
+			self.machine_list = []
+		# garantir sort por nome da maquina
+		self.machine_list = sorted(self.machine_list, key=lambda x: (x.get('name') or '').lower())
+		self.populate_machine_tree()
 
-            lbl = tk.Label(modal, text="Informe credenciais no formato DOMAIN\\user", font=("Segoe UI", 10))
-            lbl.pack(pady=(10, 6))
+	def save_machine_list(self):
+		try:
+			with open(self.machine_json_path + '.tmp', 'w', encoding='utf-8') as fh:
+				json.dump(self.machine_list, fh, ensure_ascii=False, indent=2)
+			# atomic replace
+			os.replace(self.machine_json_path + '.tmp', self.machine_json_path)
+		except Exception as e:
+			# mostrar no output
+			self.txt_output.configure(state='normal')
+			self.txt_output.insert(tk.END, f"Falha ao salvar lista de máquinas: {e}\n")
+			self.txt_output.configure(state='disabled')
 
-            frame = tk.Frame(modal)
-            frame.pack(pady=(6, 6), padx=10, fill='x')
-            tk.Label(frame, text="Usuário:", width=12, anchor='w').grid(row=0, column=0)
-            user_var = tk.StringVar()
-            user_entry = tk.Entry(frame, textvariable=user_var, width=36)
-            user_entry.grid(row=0, column=1)
+	def populate_machine_tree(self):
+		# limpar tree
+		for it in self.tree.get_children():
+			self.tree.delete(it)
+		# adicionar ordenada
+		for m in sorted(self.machine_list, key=lambda x: (x.get('name') or '').lower()):
+			name = (m.get('name') or '').strip().upper()
+			alias = (m.get('alias') or '').strip().upper()
+			online = bool(m.get('online'))
+			status = 'ONLINE' if online else 'OFFLINE'
+			tag = 'online' if online else 'offline'
+			# usar iid como nome para seleção/identificação
+			self.tree.insert('', 'end', iid=name, values=(name, alias, status), tags=(tag,))
 
-            tk.Label(frame, text="Senha:", width=12, anchor='w').grid(row=1, column=0)
-            pwd_var = tk.StringVar()
-            pwd_entry = tk.Entry(frame, textvariable=pwd_var, width=36, show='*')
-            pwd_entry.grid(row=1, column=1)
+	def load_selected_machine_into_fields(self):
+		sel = self.tree.selection()
+		if not sel:
+			return
+		name = sel[0]
+		m = next((x for x in self.machine_list if x.get('name') == name), None)
+		if not m:
+			return
+		self.ent_computer.delete(0, tk.END)
+		self.ent_computer.insert(0, (m.get('name') or '').upper())
+		self.ent_alias.delete(0, tk.END)
+		self.ent_alias.insert(0, (m.get('alias') or '').upper())
 
-            def on_ok():
-                u = user_var.get().strip()
-                p = pwd_var.get()
-                if not u or '\\' not in u:
-                    messagebox.showwarning("Formato inválido", "Informe no formato DOMAIN\\user")
-                    return
-                try:
-                    csinfo.set_default_credential(u, p)
-                    messagebox.showinfo("Credenciais definidas", "Credenciais salvas para uso nas chamadas remotas.")
-                except Exception as e:
-                    messagebox.showerror("Erro", f"Não foi possível salvar as credenciais: {e}")
-                modal.grab_release()
-                modal.destroy()
+	def save_selected_or_new_machine(self):
+		# garantir maiúsculas
+		name = (self.ent_computer.get() or '').strip().upper()
+		alias = (self.ent_alias.get() or '').strip().upper()
+		if not name:
+			self.txt_output.configure(state='normal')
+			self.txt_output.insert(tk.END, "Nome da máquina é obrigatório para salvar.\n")
+			self.txt_output.configure(state='disabled')
+			return
+		if not alias:
+			self.txt_output.configure(state='normal')
+			self.txt_output.insert(tk.END, "Apelido é obrigatório para salvar.\n")
+			self.txt_output.configure(state='disabled')
+			return
+		# atualizar ou inserir
+		existing = next((x for x in self.machine_list if x.get('name') == name), None)
+		if existing:
+			existing['alias'] = alias
+		else:
+			self.machine_list.append({'name': name, 'alias': alias, 'online': False})
+		# persistir e repintar
+		self.save_machine_list()
+		self.populate_machine_tree()
+		# após salvar, executar um ping rápido para atualizar o estado dessa máquina na listagem
+		try:
+			threading.Thread(target=self._ping_single_and_queue, args=(name,), daemon=True).start()
+		except Exception:
+			pass
+		self.txt_output.configure(state='normal')
+		self.txt_output.insert(tk.END, f"Máquina '{name}' salva.\n")
+		self.txt_output.configure(state='disabled')
 
-            def on_clear():
-                try:
-                    csinfo.clear_default_credential()
-                    messagebox.showinfo("Credenciais", "Credenciais padrão removidas.")
-                except Exception:
-                    messagebox.showwarning("Aviso", "Não foi possível remover credenciais (ou nenhuma estava definida).")
-                modal.grab_release()
-                modal.destroy()
+	def delete_selected_machine(self):
+		sel = self.tree.selection()
+		if not sel:
+			return
+		name = sel[0]
+		self.machine_list = [m for m in self.machine_list if m.get('name') != name]
+		self.save_machine_list()
+		self.populate_machine_tree()
+		self.txt_output.configure(state='normal')
+		self.txt_output.insert(tk.END, f"Máquina '{name}' excluída.\n")
+		self.txt_output.configure(state='disabled')
 
-            btn_frame = tk.Frame(modal)
-            btn_frame.pack(pady=(6, 8))
-            ok_btn = ttk.Button(btn_frame, text="OK", command=on_ok)
-            ok_btn.grid(row=0, column=0, padx=6)
-            clear_btn = ttk.Button(btn_frame, text="Remover credenciais", command=on_clear)
-            clear_btn.grid(row=0, column=1, padx=6)
-            cancel_btn = ttk.Button(btn_frame, text="Cancelar", command=lambda: (modal.grab_release(), modal.destroy()))
-            cancel_btn.grid(row=0, column=2, padx=6)
+	def open_machine_json_folder(self):
+		p = os.path.abspath(self.machine_json_path)
+		folder = os.path.dirname(p)
+		try:
+			if sys.platform.startswith('win'):
+				os.startfile(folder)
+			else:
+				subprocess.run(['xdg-open', folder])
+		except Exception as e:
+			self.txt_output.configure(state='normal')
+			self.txt_output.insert(tk.END, f"Falha ao abrir pasta: {e}\n")
+			self.txt_output.configure(state='disabled')
 
-            # Focar no campo usuário
-            user_entry.focus_set()
-            modal.wait_window()
-        except Exception as e:
-            messagebox.showerror("Erro", f"Não foi possível abrir o modal de credenciais: {e}")
+	def refresh_machine_statuses(self):
+		# executar ping em background para todas as máquinas
+		thr = threading.Thread(target=self._ping_worker, daemon=True)
+		thr.start()
 
-    # ...métodos start_process, run_csinfo, exportar permanecem iguais, apenas adaptando para os novos widgets...
+	def _ping_host(self, host):
+		# platform-specific ping
+		if sys.platform.startswith('win'):
+			cmd = ['ping', '-n', '1', '-w', '1000', host]
+		else:
+			cmd = ['ping', '-c', '1', '-W', '1', host]
+		try:
+			res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+			return res.returncode == 0
+		except Exception:
+			return False
 
-    def start_process(self):
-        self.protocol("WM_DELETE_WINDOW", self.bloquear_fechar)  # Bloqueia o botão X
-        self.config(cursor="wait")
-        self.info_text.config(cursor="wait", state=tk.DISABLED)
-        self.start_btn.config(state=tk.DISABLED)
-        self.machine_entry.config(state=tk.DISABLED)
-        self.radio_txt.config(state=tk.DISABLED)
-        self.radio_pdf.config(state=tk.DISABLED)
-        self.radio_ambos.config(state=tk.DISABLED)
-        self.export_btn.config(state=tk.DISABLED)
-        self.exit_btn.config(state=tk.DISABLED)
-        self.progress_label.config(text="", fg="black")
-        self.info_text.delete(1.0, tk.END)
-        # Reseta barra de progresso antes da nova análise
-        try:
-            self.progressbar['value'] = 0
-            self.progress_percent_label.config(text='0%')
-        except Exception:
-            pass
-        threading.Thread(target=self.run_csinfo, daemon=True).start()
+	def _ping_worker(self):
+		for m in self.machine_list:
+			name = (m.get('name') or '').strip()
+			# usar o nome original para o ping (sem forçar maiúsculas) — nomes FQDN podem ser sensíveis
+			on = self._ping_host(name)
+			m['online'] = on
+			# enviar status textual consistente
+			status_text = 'ONLINE' if on else 'OFFLINE'
+			self.queue.put(('machine_status', name, status_text))
+		# após todas atualizações, salvar estado
+		self.save_machine_list()
 
-    def run_csinfo(self):
-        print('DEBUG: Entrou em run_csinfo')
-        try:
-            import platform
-            valor_input = self.machine_var.get().strip()
-            print('DEBUG: valor_input:', valor_input)
-            if not valor_input or valor_input == self.placeholder:
-                machine_name = None
-            elif valor_input.upper() == platform.node().upper():
-                machine_name = None
-            else:
-                machine_name = valor_input
-            print('DEBUG: machine_name:', machine_name)
-            if machine_name:
-                self.progress_label.config(text=f"Acessando a máquina {machine_name}...", fg="black", font=("Helvetica", 10, "bold"))
-                self.update_idletasks()
-            from csinfo import check_remote_machine
-            print('DEBUG: Importou check_remote_machine')
-            if machine_name and not check_remote_machine(machine_name):
-                self.progress_label.config(text=f"Não foi possível acessar a máquina '{machine_name}'. Ela pode estar desligada, fora da rede ou sem WinRM ativado.")
-                self.start_btn.config(state=tk.NORMAL)
-                self.machine_entry.config(state=tk.NORMAL)
-                self.radio_txt.config(state=tk.DISABLED)
-                self.radio_pdf.config(state=tk.DISABLED)
-                self.radio_ambos.config(state=tk.DISABLED)
-                self.export_btn.config(state=tk.DISABLED)
-                self.exit_btn.config(state=tk.NORMAL)
-                self.desbloquear_fechar()  # Reabilita o botão X
-                print('DEBUG: Falha ao acessar máquina remota')
-                return
-            self.capturado = []
-            self.info_text.config(state=tk.NORMAL)
-            self.info_text.delete(1.0, tk.END)
-            def gui_callback(percent, etapa_texto=None):
-                # callback que recebe (percent, etapa_texto) vindos de csinfo.barra_progresso
-                def atualizar_ui():
-                    try:
-                        if etapa_texto:
-                            self.progress_label.config(text=etapa_texto, font=("Helvetica", 10, "bold"))
-                        # Se o primeiro argumento for percentual, atualiza a barra
-                        try:
-                            perc = int(percent)
-                            self.progressbar['value'] = perc
-                            self.progress_percent_label.config(text=f"{perc}%")
-                        except Exception:
-                            pass
-                    except Exception:
-                        pass
-                # Atualiza UI de forma segura na thread principal
-                self.after(0, atualizar_ui)
-            print('DEBUG: Chamando csinfo_main')
-            # Se o usuário definiu credenciais via GUI, elas já foram aplicadas via csinfo.set_default_credential
-            # Apenas coleta os dados na análise; não gerar arquivos automaticamente
-            include_debug = bool(self.include_debug_var.get())
-            resultado = csinfo_main(export_type=None, barra_callback=gui_callback, computer_name=machine_name, include_debug_on_export=include_debug)
-            # Armazena resultado da análise para possível exportação posterior
-            self.last_result = resultado
-            print('DEBUG: Resultado csinfo_main:', resultado)
-            self.progress_label.config(text="Análise finalizada!", fg="red", font=("Helvetica", 10, "bold"))
-            # Ao final, preferir mostrar o relatório em memória (lines) em vez de abrir arquivo no disco
-            lines = resultado.get('lines') or []
-            if lines:
-                conteudo = "\n".join(lines)
-                self.info_text.config(state=tk.NORMAL)  # Habilita só para atualizar
-                self.info_text.delete(1.0, tk.END)
-                self.info_text.insert(tk.END, conteudo)
-                self.info_text.see(tk.END)
-                self.info_text.config(state=tk.DISABLED)  # Volta para somente leitura
-                # Atualiza barra de progresso para 100% ao final
-                try:
-                    self.progressbar['value'] = 100
-                    self.progress_percent_label.config(text='100%')
-                except Exception:
-                    pass
-            else:
-                # Fallback: se não houver linhas, tentar ler txt_path (caso exista)
-                txt_path = resultado.get('txt')
-                print('DEBUG: txt_path fallback:', txt_path)
-                if txt_path and os.path.exists(txt_path):
-                    self.info_text.config(state=tk.NORMAL)
-                    self.info_text.delete(1.0, tk.END)
-                    with open(txt_path, encoding='utf-8') as f:
-                        conteudo = f.read()
-                    self.info_text.insert(tk.END, conteudo)
-                    self.info_text.config(state=tk.DISABLED)
-                else:
-                    self.info_text.config(state=tk.NORMAL)
-                    self.info_text.delete(1.0, tk.END)
-                    self.info_text.insert(tk.END, "Relatório não encontrado.")
-                    self.info_text.config(state=tk.DISABLED)
-            self.export_btn.config(state=tk.NORMAL)
-            self.radio_txt.config(state=tk.NORMAL)
-            self.radio_pdf.config(state=tk.NORMAL)
-            self.radio_ambos.config(state=tk.NORMAL)
-        except Exception as e:
-            print('DEBUG: Exceção geral em run_csinfo:', e)
-            messagebox.showerror("Erro", str(e))
-            self.export_btn.config(state=tk.DISABLED)
-        finally:
-            self.config(cursor="arrow")
-            self.info_text.config(cursor="arrow", state=tk.NORMAL)
-            self.start_btn.config(state=tk.NORMAL)
-            self.machine_entry.config(state=tk.NORMAL)
-            self.radio_txt.config(state=tk.NORMAL)
-            self.radio_pdf.config(state=tk.NORMAL)
-            self.radio_ambos.config(state=tk.NORMAL)
-            self.exit_btn.config(state=tk.NORMAL)
-            self.desbloquear_fechar()  # Reabilita o botão X
+	def _ping_single_and_queue(self, name):
+		"""Ping uma máquina específica em background e envie resultado para a queue."""
+		try:
+			on = self._ping_host(name)
+			status_text = 'ONLINE' if on else 'OFFLINE'
+			self.queue.put(('machine_status', name, status_text))
+		except Exception:
+			pass
 
-    def update_progress(self, value, etapa_texto=None):
-        def atualizar():
-            if etapa_texto:
-                self.progress_label.config(text=etapa_texto)
-            self.update_idletasks()
-        self.after(0, atualizar)
+	def start_collection(self):
+		# prevenir múltiplos cliques
+		if self.worker_thread and self.worker_thread.is_alive():
+			return
 
-    def exportar(self):
-        # Reusa resultado da análise se disponível para evitar reexecução
-        # self.last_result é preenchido após run_csinfo
-        self.protocol("WM_DELETE_WINDOW", self.bloquear_fechar)  # Bloqueia o botão X
-        self.config(cursor="wait")
-        self.info_text.config(cursor="wait", state=tk.DISABLED)
-        self.start_btn.config(state=tk.DISABLED)
-        self.machine_entry.config(state=tk.DISABLED)
-        self.radio_txt.config(state=tk.DISABLED)
-        self.radio_pdf.config(state=tk.DISABLED)
-        self.radio_ambos.config(state=tk.DISABLED)
-        self.export_btn.config(state=tk.DISABLED)
-        self.exit_btn.config(state=tk.DISABLED)
-        self.progress_label.config(text="Exportando o relatório, aguarde...", font=("Helvetica", 10, "bold"))
-        self.update_idletasks()
-        try:
-            print('DEBUG: Entrou no bloco try da exportação')
-            machine_name = self.get_computer_name_input()
-            tipo = self.export_var.get()
-            msg = []
-            # Tentar reutilizar resultado da análise
-            reused = False
-            if hasattr(self, 'last_result') and self.last_result:
-                last_machine = self.last_result.get('machine')
-                # Comparar nomes (None ou igual ignorando case)
-                if (not machine_name and (not last_machine or last_machine.lower() == csinfo.get_machine_name(None).lower())) or (last_machine and machine_name and last_machine.lower() == machine_name.lower()):
-                    lines = self.last_result.get('lines') or []
-                    safe_name = csinfo.safe_filename(last_machine or csinfo.get_machine_name(None))
-                    base_path = os.path.join(os.getcwd(), f"Info_maquina_{safe_name}.txt")
-                    if tipo in ('txt', 'ambos'):
-                        try:
-                            include_debug_reuse = bool(self.include_debug_var.get())
-                            csinfo.write_report(base_path, lines, include_debug=include_debug_reuse)
-                            msg.append(f"Arquivo TXT exportado: {base_path}")
-                            reused = True
-                        except Exception as e:
-                            print('DEBUG: Erro ao reusar write_report:', e)
-                    if tipo in ('pdf', 'ambos'):
-                        pdf_path = base_path.replace('.txt', '.pdf')
-                        try:
-                            ok = csinfo.write_pdf_report(pdf_path, lines, last_machine or csinfo.get_machine_name(None))
-                            if ok:
-                                msg.append(f"Arquivo PDF exportado: {pdf_path}")
-                                reused = True
-                        except Exception as e:
-                            print('DEBUG: Erro ao reusar write_pdf_report:', e)
+		computer = self.ent_computer.get().strip() or None
+		alias = self.ent_alias.get().strip() or None
+		export = self.cmb_export.get()
+		include_debug = False
 
-            # Se não reutilizamos (nenhum resultado disponível ou máquina diferente), executar export padrão
-            if not reused:
-                resultado = csinfo_main(export_type=tipo, barra_callback=None, computer_name=machine_name)
-                print('DEBUG: Resultado da exportação (execução):', resultado)
-                if resultado.get('txt'):
-                    msg.append(f"Arquivo TXT exportado: {resultado['txt']}")
-                if resultado.get('pdf'):
-                    msg.append(f"Arquivo PDF exportado: {resultado['pdf']}")
-            messagebox.showinfo("Exportação", "\n".join(msg) if msg else "Nenhum arquivo exportado.")
-            caminho = None
-            if msg:
-                # pegar o primeiro caminho reportado na mensagem
-                primeiros = [m.split(': ',1)[1] for m in msg if ': ' in m]
-                caminho = primeiros[0] if primeiros else None
-            if caminho:
-                print('DEBUG: Caminho do arquivo exportado:', caminho)
-                abrir = messagebox.askyesno("Abrir pasta", "Deseja abrir o diretório onde o relatório foi salvo?")
-                if abrir:
-                    print('DEBUG: Tentando acessar os.path.dirname')
-                    pasta = os.path.dirname(caminho)
-                    print('DEBUG: Pasta:', pasta)
-                    try:
-                        subprocess.Popen(f'explorer "{pasta}"')
-                    except Exception as e:
-                        print('DEBUG: Erro ao abrir pasta:', e)
-                        messagebox.showerror("Erro", f"Não foi possível abrir a pasta:\n{e}")
-        except Exception as e:
-            print('DEBUG: Exceção geral na exportação:', e)
-            messagebox.showerror("Erro na exportação", str(e))
-        finally:
-            self.config(cursor="arrow")
-            self.info_text.config(cursor="arrow", state=tk.NORMAL)
-            self.progress_label.config(text="")
-            self.start_btn.config(state=tk.NORMAL)
-            self.machine_entry.config(state=tk.NORMAL)
-            self.radio_txt.config(state=tk.NORMAL)
-            self.radio_pdf.config(state=tk.NORMAL)
-            self.radio_ambos.config(state=tk.NORMAL)
-            self.export_btn.config(state=tk.NORMAL)
-            self.exit_btn.config(state=tk.NORMAL)
-            self.desbloquear_fechar()  # Reabilita o botão X
+		# limpar área de saída
+		self.clear_output()
 
-    def get_computer_name_input(self):
-        value = self.machine_var.get().strip()
-        # Garante que o placeholder nunca seja considerado
-        if not value or value == self.placeholder or value.lower() == self.placeholder.lower():
-            return None  # None indica máquina local
-        return value
+		# bloquear campos
+		self._set_controls_state('disabled')
+		self.btn_start.configure(text='⏳ Processando...')
+		self.lbl_progress.configure(text='Iniciando...')
+		self.progress['value'] = 0
 
-    def on_listbox_double_click(self, event):
-        selection = self.listbox_maquinas.curselection()
-        if selection:
-            valor = self.listbox_maquinas.get(selection[0])
-            nome_maquina = valor.split(' - ')[0].strip()
-            if nome_maquina and nome_maquina.lower() != 'carregando...' and nome_maquina.lower() != 'nenhuma máquina encontrada na rede.' and not nome_maquina.lower().startswith('erro'):
-                self.machine_var.set(nome_maquina)
-                self.machine_entry.config(fg='#222', font=('Segoe UI', 10), justify='center')
+		# callback que será chamado pelo csinfo.main
+		def barra_callback(percent_or_none, line_or_stage):
+			# se percent_or_none é None -> é uma linha de saída
+			try:
+				if percent_or_none is None:
+					self.queue.put(('line', str(line_or_stage)))
+				else:
+					# valor percentual
+					try:
+						perc = int(percent_or_none)
+					except Exception:
+						perc = 0
+					self.queue.put(('progress', perc, str(line_or_stage)))
+			except Exception:
+				pass
 
-if __name__ == "__main__":
-    app = CSInfoApp()
-    app.mainloop()
+		# worker thread
+		def worker():
+			try:
+				# se credenciais foram preenchidas no formulário, definir como default para o run_powershell
+				user = (self.ent_user.get() or '').strip()
+				passwd = (self.ent_pass.get() or '')
+				if user and passwd:
+					try:
+						csinfo.set_default_credential(user, passwd)
+					except Exception:
+						pass
+				try:
+					csinfo.main(export_type=(export if export != 'nenhum' else None), barra_callback=barra_callback, computer_name=computer, machine_alias=alias)
+					self.queue.put(('done', None))
+				finally:
+					# limpar credencial padrão para não vazar dados
+					try:
+						csinfo.clear_default_credential()
+					except Exception:
+						pass
+			except Exception as e:
+				self.queue.put(('error', str(e)))
+
+		self.worker_thread = threading.Thread(target=worker, daemon=True)
+		self.worker_thread.start()
+
+	def _process_queue(self):
+		try:
+			while True:
+				item = self.queue.get_nowait()
+				if not item:
+					continue
+				kind = item[0]
+				if kind == 'line':
+					line = item[1]
+					# adicionar linha de saída (manter histórico completo)
+					self.txt_output.configure(state='normal')
+					# normalizar CR/LF e garantir que todo o conteúdo é inserido
+					try:
+						normalized = str(line).replace('\r\n', '\n').replace('\r', '\n')
+						self.txt_output.insert(tk.END, normalized + "\n")
+						self.txt_output.see(tk.END)
+					except Exception:
+						try:
+							self.txt_output.insert(tk.END, str(line) + "\n")
+						except Exception:
+							pass
+					self.txt_output.configure(state='disabled')
+				elif kind == 'machine_status':
+					# atualizar a coluna de status da linha com iid igual ao nome
+					iid = item[1]
+					status = item[2]
+					# normalizar para formato textual esperado
+					if status in ('🟢', '🔴'):
+						status_text = 'ONLINE' if status == '🟢' else 'OFFLINE'
+					else:
+						status_text = str(status).strip().upper()
+					# tentar atualizar diretamente pelo iid (geralmente o nome em MAIÚSCULAS)
+					# se modo debug, registrar estado da árvore
+					if getattr(self, 'debug', False):
+						try:
+							self.txt_output.configure(state='normal')
+							self.txt_output.insert(tk.END, f"[debug] children iids: {self.tree.get_children()}\n")
+							self.txt_output.see(tk.END)
+							self.txt_output.configure(state='disabled')
+						except Exception:
+							pass
+					try:
+						vals = self.tree.item(iid, 'values')
+					except Exception:
+						vals = None
+					# se não encontrou pelo iid, procurar por linha cujo primeiro valor (name) case-insensitive bata com iid
+					if not vals:
+						found = None
+						for child in self.tree.get_children():
+							v = self.tree.item(child, 'values')
+							# debug: mostrar o valor avaliado
+							if getattr(self, 'debug', False):
+								try:
+									self.txt_output.configure(state='normal')
+									self.txt_output.insert(tk.END, f"[debug] checking child={child} values={v}\n")
+									self.txt_output.see(tk.END)
+									self.txt_output.configure(state='disabled')
+								except Exception:
+									pass
+							if v and str(v[0]).strip().upper() == str(iid).strip().upper():
+								found = child
+								vals = v
+								break
+						if found:
+							iid = found
+						# se agora temos vals, atualizamos preferencialmente usando tree.set
+						if vals:
+							try:
+								# atualizar apenas a coluna 'status' com o texto normalizado
+								self.tree.set(iid, 'status', status_text)
+								# aplicar tag correspondente
+								tag = 'online' if status_text == 'ONLINE' else 'offline'
+								try:
+									self.tree.item(iid, tags=(tag,))
+								except Exception:
+									pass
+								# forçar refresh UI
+								try:
+									self.update_idletasks()
+								except Exception:
+									pass
+							except Exception:
+								# fallback: tentar alterar via item
+								try:
+									self.tree.item(iid, values=(vals[0], vals[1], status_text))
+								except Exception:
+									pass
+					# também atualizar o registro em machine_list para refletir o estado
+					try:
+						name_key = str((vals[0] if vals else iid)).strip()
+						for m in self.machine_list:
+							if str(m.get('name') or '').strip().upper() == name_key.upper():
+								m['online'] = (status_text == 'ONLINE')
+								break
+					except Exception:
+						pass
+					# escrever log reduzido sobre o resultado do ping para ajudar diagnóstico
+					try:
+						self.txt_output.configure(state='normal')
+						self.txt_output.insert(tk.END, f"[ping] {name_key} -> {status_text.lower()}\n")
+						self.txt_output.see(tk.END)
+						self.txt_output.configure(state='disabled')
+					except Exception:
+						pass
+				elif kind == 'progress':
+					perc = item[1]
+					etapa = item[2]
+					self.progress['value'] = perc
+					self.lbl_progress.configure(text=f"{etapa} — {perc}%")
+				elif kind == 'done':
+					self.lbl_progress.configure(text='Concluído')
+					self.progress['value'] = 100
+					self.btn_start.configure(text='Coletar')
+					self._set_controls_state('normal')
+				elif kind == 'error':
+					msg = item[1]
+					self.txt_output.configure(state='normal')
+					self.txt_output.insert(tk.END, f"ERRO: {msg}\n")
+					self.txt_output.see(tk.END)
+					self.txt_output.configure(state='disabled')
+					self.lbl_progress.configure(text='Erro')
+					self.btn_start.configure(text='Coletar')
+					self._set_controls_state('normal')
+		except queue.Empty:
+			pass
+		# re-schedule
+		self.after(100, self._process_queue)
+
+
+def main():
+	app = CSInfoGUI()
+	app.mainloop()
+
+
+if __name__ == '__main__':
+	main()
+
