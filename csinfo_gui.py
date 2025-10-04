@@ -89,6 +89,7 @@ class CSInfoGUI(tk.Tk):
         self.worker_thread = None
         self._processing = False
         self._pinging = False
+        self._keep_progress = False
         self.last_lines = []
         self._last_collection_computer = None
         self.machine_list = []
@@ -142,10 +143,10 @@ class CSInfoGUI(tk.Tk):
         # Campos de credenciais movidos para baixo dos botões (rótulos completos)
         # rótulo de seção
         ttk.Label(left, text='Administrador da rede', font=('Segoe UI', 9, 'bold'), foreground='#333').pack(anchor='w', pady=(0, 6))
-        ttk.Label(left, text='Usuário administrador da rede:').pack(anchor='w')
+        ttk.Label(left, text='Usuário:').pack(anchor='w')
         self.ent_user = ttk.Entry(left, width=32)
         self.ent_user.pack()
-        ttk.Label(left, text='Senha administrador da rede:').pack(anchor='w', pady=(8, 0))
+        ttk.Label(left, text='Senha:').pack(anchor='w', pady=(8, 0))
         self.ent_pass = ttk.Entry(left, width=32, show='*')
         self.ent_pass.pack()
         
@@ -190,7 +191,7 @@ class CSInfoGUI(tk.Tk):
         self.btn_refresh = ttk.Button(left, text='Atualizar (F5)', command=self.refresh_machine_status)
         self.btn_refresh.pack(fill='x', pady=(8, 0))
         try:
-            Tooltip(self.btn_refresh, 'Atualiza o estado (ONLINE/OFFLINE) das máquinas (atalho F5)')
+            Tooltip(self.btn_refresh, 'Atualiza o estado (ONLINE/OFFLINE) das máquinas')
         except Exception:
             pass
         try:
@@ -201,9 +202,17 @@ class CSInfoGUI(tk.Tk):
         mid = ttk.Frame(frm)
         mid.pack(side='left', fill='both', expand=True, padx=(8, 8))
         self.tree = ttk.Treeview(mid, columns=('name', 'alias', 'status'), show='headings', selectmode='browse')
-        self.tree.heading('name', text='Máquina')
-        self.tree.heading('alias', text='Apelido')
-        self.tree.heading('status', text='Estado')
+        # habilitar ordenação clicando no cabeçalho
+        self._sort_column = None
+        self._sort_reverse = False
+        # labels originais (usados para compor o texto com a seta)
+        self._col_labels = {'name': 'Máquina', 'alias': 'Apelido', 'status': 'Estado'}
+        # aplicar headings via helper que também desenha a seta quando necessário
+        def _make_heading(col):
+            self.tree.heading(col, text=self._col_labels.get(col, col), command=lambda c=col: self._sort_by_column(c))
+        _make_heading('name')
+        _make_heading('alias')
+        _make_heading('status')
         self.tree.column('name', width=200, anchor='center')
         self.tree.column('alias', width=160, anchor='center')
         self.tree.column('status', width=90, anchor='center')
@@ -242,11 +251,39 @@ class CSInfoGUI(tk.Tk):
             if os.path.exists(self.machine_json_path):
                 with open(self.machine_json_path, 'r', encoding='utf-8') as fh:
                     data = json.load(fh)
+                    # backward compat: file could be a list (old format) or dict (new format)
                     if isinstance(data, list):
                         self.machine_list = data
+                        self._loaded_meta = {}
+                    elif isinstance(data, dict):
+                        self.machine_list = data.get('machines', []) if isinstance(data.get('machines', []), list) else []
+                        self._loaded_meta = data.get('_meta', {}) or {}
+                    else:
+                        self.machine_list = []
+                        self._loaded_meta = {}
         except Exception:
             self.machine_list = []
+            self._loaded_meta = {}
         self.populate_machine_tree()
+        # aplicar ordenação carregada (se houver)
+        try:
+            meta = getattr(self, '_loaded_meta', {}) or {}
+            col = meta.get('sort_column')
+            rev = bool(meta.get('sort_reverse'))
+            if col:
+                self._sort_column = col
+                self._sort_reverse = rev
+                try:
+                    # ordenar com a mesma lógica que _sort_by_column
+                    self._sort_by_column(col)
+                except Exception:
+                    pass
+                try:
+                    self._refresh_sort_indicators()
+                except Exception:
+                    pass
+        except Exception:
+            pass
         # iniciar verificação de ping assim que a lista for carregada
         try:
             threading.Thread(target=self._ping_worker, daemon=True).start()
@@ -257,8 +294,16 @@ class CSInfoGUI(tk.Tk):
         try:
             base = os.path.dirname(self.machine_json_path)
             os.makedirs(base, exist_ok=True)
+            # salvar formato novo: objeto com lista e metadados (backward compat handled on load)
+            tosave = {
+                'machines': self.machine_list,
+                '_meta': {
+                    'sort_column': getattr(self, '_sort_column', None),
+                    'sort_reverse': bool(getattr(self, '_sort_reverse', False)),
+                }
+            }
             with open(self.machine_json_path, 'w', encoding='utf-8') as fh:
-                json.dump(self.machine_list, fh, ensure_ascii=False, indent=2)
+                json.dump(tosave, fh, ensure_ascii=False, indent=2)
         except Exception:
             pass
 
@@ -279,6 +324,76 @@ class CSInfoGUI(tk.Tk):
                     self.tree.insert('', 'end', values=(name.upper(), alias.upper(), 'ONLINE' if online else 'OFFLINE'))
                 except Exception:
                     pass
+
+    def _sort_by_column(self, col):
+        try:
+            # determinar chave de ordenação
+            if col == 'name':
+                keyfunc = lambda m: (m.get('name') or '').strip().upper()
+            elif col == 'alias':
+                keyfunc = lambda m: (m.get('alias') or '').strip().upper()
+            elif col == 'status':
+                # ordenar por online: True primeiro quando ascendente
+                keyfunc = lambda m: (0 if bool(m.get('online')) else 1, (m.get('name') or '').strip().upper())
+            else:
+                keyfunc = lambda m: (m.get(col) or '')
+
+            # alternar direção se a mesma coluna for clicada
+            if self._sort_column == col:
+                self._sort_reverse = not self._sort_reverse
+            else:
+                self._sort_reverse = False
+                self._sort_column = col
+
+            self.machine_list.sort(key=keyfunc, reverse=self._sort_reverse)
+            self.populate_machine_tree()
+            # atualizar indicadores visuais nos headings e fazer um flash sutil
+            try:
+                self._refresh_sort_indicators()
+            except Exception:
+                pass
+            try:
+                self._flash_sort_indicator(self._sort_column)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _refresh_sort_indicators(self):
+        """Atualiza o texto dos headings adicionando ▴ (asc) ou ▾ (desc) na coluna ordenada."""
+        try:
+            for col, label in self._col_labels.items():
+                txt = label
+                if self._sort_column == col:
+                    # usar setas discretas: ▴ (asc) / ▾ (desc)
+                    arrow = '▴' if not self._sort_reverse else '▾'
+                    txt = f"{label} {arrow}"
+                try:
+                    # reatribui o heading com o mesmo command
+                    self.tree.heading(col, text=txt, command=lambda c=col: self._sort_by_column(c))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _flash_sort_indicator(self, col):
+        """Mostra uma seta 'grande' temporária para destaque e volta ao indicador discreto."""
+        try:
+            if not col:
+                return
+            label = self._col_labels.get(col, col)
+            big = '▲' if not self._sort_reverse else '▼'
+            try:
+                self.tree.heading(col, text=f"{label} {big}", command=lambda c=col: self._sort_by_column(c))
+            except Exception:
+                pass
+            # agendar retorno ao indicador discreto
+            try:
+                self.after(200, self._refresh_sort_indicators)
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     # CRUD
     def save_selected_or_new_machine(self):
@@ -364,6 +479,15 @@ class CSInfoGUI(tk.Tk):
             # desabilitar botão export enquanto não houver coleta
             try:
                 self.btn_export.configure(state='disabled')
+            except Exception:
+                pass
+            # limpar progresso mantido
+            try:
+                self._keep_progress = False
+            except Exception:
+                pass
+            try:
+                self.progress['value'] = 0
             except Exception:
                 pass
         except Exception:
@@ -499,6 +623,11 @@ class CSInfoGUI(tk.Tk):
 
         self.clear_output()
         self._set_controls_state('disabled')
+        try:
+            # garantir radiobuttons/estado de export desabilitados enquanto processa
+            self._update_export_button_state()
+        except Exception:
+            pass
         self._processing = True
         try:
             self.protocol('WM_DELETE_WINDOW', self._on_close_attempt)
@@ -643,8 +772,21 @@ class CSInfoGUI(tk.Tk):
                     self.btn_start.configure(text='Coletar (F3)')
                     self.lbl_progress.configure(text='Pronto')
                     self.progress['value'] = 100
-                    if self.last_lines:
-                        self.btn_export.configure(state='normal')
+                    # manter barra preenchida até que o usuário selecione outra máquina
+                    try:
+                        self._keep_progress = True
+                    except Exception:
+                        pass
+                    # atualizar estado dos controles de export (radiobuttons + botão)
+                    try:
+                        self._update_export_button_state()
+                    except Exception:
+                        # fallback: habilitar botão de export se houver linhas
+                        try:
+                            if self.last_lines:
+                                self.btn_export.configure(state='normal')
+                        except Exception:
+                            pass
                 elif kind == 'error':
                     self._processing = False
                     self._set_controls_state('normal')
@@ -657,7 +799,9 @@ class CSInfoGUI(tk.Tk):
             pass
         finally:
             if not self._processing:
-                self.progress['value'] = 0
+                # somente resetar se não estivermos mantendo o progresso pós-coleta
+                if not getattr(self, '_keep_progress', False):
+                    self.progress['value'] = 0
             self.after(100, self._process_queue)
 
     def _set_controls_state(self, state='normal'):
@@ -665,7 +809,7 @@ class CSInfoGUI(tk.Tk):
         widgets = [
             self.ent_computer, self.ent_alias, self.ent_user, self.ent_pass,
             getattr(self, 'export_frame', None), self.btn_save, self.btn_delete, self.btn_export,
-            self.btn_start, getattr(self, 'btn_new', None), getattr(self, 'btn_open_folder', None), getattr(self, 'btn_refresh', None)
+            self.btn_start, getattr(self, 'btn_new', None), getattr(self, 'btn_open_folder', None), getattr(self, 'btn_refresh', None), getattr(self, 'tree', None)
         ]
         for w in widgets:
             try:
@@ -681,6 +825,86 @@ class CSInfoGUI(tk.Tk):
                         pass
             except Exception:
                 pass
+        # alterar cursor da janela para indicar espera durante processamento
+        try:
+            if state == 'disabled':
+                try:
+                    self.configure(cursor='watch')
+                except Exception:
+                    try:
+                        self.configure(cursor='wait')
+                    except Exception:
+                        pass
+            else:
+                try:
+                    self.configure(cursor='')
+                except Exception:
+                    pass
+            try:
+                # forçar atualização visual imediata
+                self.update_idletasks()
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+        # bloquear cabeçalhos da tree (comandos de ordenação) para evitar interação
+        try:
+            if getattr(self, 'tree', None) is not None:
+                if state == 'disabled':
+                    try:
+                        self._disable_tree_headings()
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        self._restore_tree_headings()
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    def _disable_tree_headings(self):
+        """Substitui temporariamente os comandos dos headings por no-ops para bloquear interação."""
+        try:
+            # armazenar comandos atuais para restauração
+            self._saved_heading_cmds = getattr(self, '_saved_heading_cmds', {})
+            for col in list(self._col_labels.keys()):
+                try:
+                    # salvar estado
+                    try:
+                        cmd = self.tree.heading(col, option='command')
+                    except Exception:
+                        cmd = None
+                    self._saved_heading_cmds[col] = cmd
+                    # atribuir no-op
+                    self.tree.heading(col, command=lambda: None)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _restore_tree_headings(self):
+        """Restaura os comandos salvos dos headings e reaplica indicadores de ordenação."""
+        try:
+            saved = getattr(self, '_saved_heading_cmds', {}) or {}
+            for col, label in self._col_labels.items():
+                try:
+                    cmd = saved.get(col)
+                    if cmd:
+                        self.tree.heading(col, text=self.tree.heading(col, 'text'), command=cmd)
+                    else:
+                        # restaurar via helper padrão
+                        self.tree.heading(col, text=self.tree.heading(col, 'text'), command=lambda c=col: self._sort_by_column(c))
+                except Exception:
+                    pass
+            try:
+                # atualizar indicadores visuais
+                self._refresh_sort_indicators()
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     def clear_output(self):
         try:
@@ -817,6 +1041,22 @@ class CSInfoGUI(tk.Tk):
             self.clear_output()
             try:
                 self._update_export_button_state()
+            except Exception:
+                pass
+            try:
+                # seleção nova: limpar progresso mantido
+                try:
+                    self._keep_progress = False
+                except Exception:
+                    pass
+                try:
+                    self.progress['value'] = 0
+                except Exception:
+                    pass
+                try:
+                    self.lbl_progress.configure(text='Pronto')
+                except Exception:
+                    pass
             except Exception:
                 pass
         except Exception:
