@@ -2217,8 +2217,15 @@ def main(export_type=None, barra_callback=None, computer_name=None, include_debu
     # Adiciona callback para cada linha apurada
     def add_line(line):
         lines.append(line)
+        try:
+            emitted_lines.append(line)
+        except Exception:
+            pass
         if barra_callback:
-            barra_callback(None, line)
+            try:
+                barra_callback(None, line)
+            except Exception:
+                pass
 
     machine = get_machine_name(computer_name); barra_progresso(1)
     import getpass
@@ -2243,6 +2250,7 @@ def main(export_type=None, barra_callback=None, computer_name=None, include_debu
     path = os.path.join(os.getcwd(), filename)
 
     lines = []
+    emitted_lines = []
     def padrao(valor):
         return valor if valor and str(valor).strip() else "NÃO OBTIDO"
     
@@ -2572,4 +2580,21 @@ def main(export_type=None, barra_callback=None, computer_name=None, include_debu
         'machine': machine,
         'user': usuario_logado
     }
+    # Se em modo GUI e foi passado um barra_callback, enviar qualquer linha
+    # que tenha sido adicionada diretamente a `lines` mas não foi encaminhada
+    # via add_line durante a execução.
+    if barra_callback:
+        try:
+            for l in lines:
+                try:
+                    if l not in emitted_lines:
+                        barra_callback(None, l)
+                except Exception:
+                    try:
+                        barra_callback(None, str(l))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
     return resultado
