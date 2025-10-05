@@ -258,9 +258,10 @@ class CSInfoGUI(tk.Tk):
         self.tree.column('status', width=90, anchor='center')
         self.tree.pack(fill='both', expand=True)
         try:
-            self.tree.tag_configure('online', background='#e6ffed')
-            # offline: slightly darker red for better contrast
-            self.tree.tag_configure('offline', background='#ffb3b3')
+            # online: fundo verde escuro com texto branco
+            self.tree.tag_configure('online', background='#006400', foreground='#ffffff')
+            # offline: fundo vermelho escuro com texto branco
+            self.tree.tag_configure('offline', background='#8B0000', foreground='#ffffff')
         except Exception:
             pass
         # ao selecionar (single-click) limpar saída e desabilitar export até nova coleta
