@@ -226,6 +226,15 @@ class CSInfoGUI(tk.Tk):
         # ao selecionar (single-click) limpar saída e desabilitar export até nova coleta
         self.tree.bind('<<TreeviewSelect>>', lambda e: self._on_tree_selection_change())
         self.tree.bind('<Double-1>', lambda e: self._load_selection_into_form())
+        # menu de contexto (botão direito) na lista de máquinas
+        try:
+            self.tree_menu = tk.Menu(self, tearoff=0)
+            self.tree_menu.add_command(label='Reiniciar', command=lambda: self._on_context_restart())
+            self.tree_menu.add_command(label='Desligar', command=lambda: self._on_context_shutdown())
+            # bind right click
+            self.tree.bind('<Button-3>', self._on_tree_right_click)
+        except Exception:
+            self.tree_menu = None
 
         right = ttk.Frame(frm)
         right.pack(side='right', fill='both', expand=True)
@@ -613,6 +622,73 @@ class CSInfoGUI(tk.Tk):
                 self.queue.put(('ping_done',))
             except Exception:
                 pass
+
+    def _verify_admin_credentials(self, host, user, passwd, timeout=3):
+        r"""Verificação rápida se as credenciais administrativas funcionam contra o host.
+        Implementação leve: no Windows tenta um `net use \\\\host\ipc$` com timeout curto.
+        Retorna uma tupla: (ok: bool, returncode: int|None, stdout: str, stderr: str).
+        Esta função tenta limpar (net use /delete) em caso de sucesso.
+        """
+        try:
+            if not host or not user or not passwd:
+                return (False, None, '', '')
+            if not sys.platform.startswith('win'):
+                # fallback simples: não conseguimos verificar no não-Windows; assume True apenas se houver credenciais
+                return (True, 0, '', '')
+            # executar net use \\host\ipc$ <passwd> /user:<user>
+            target = f"\\\\{host}\\ipc$"
+            # limpar conexão existente (se houver) para forçar nova autenticação
+            try:
+                subprocess.run(['net', 'use', target, '/delete'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+            except Exception:
+                pass
+            # incluir /persistent:no para evitar mapeamentos persistentes
+            cmd = ['net', 'use', target, passwd, f'/user:{user}', '/persistent:no']
+            try:
+                proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout)
+                rc = proc.returncode
+                out = proc.stdout or ''
+                err = proc.stderr or ''
+                ok = rc == 0
+            except subprocess.TimeoutExpired:
+                return (False, None, '', 'timeout')
+            except Exception as e:
+                return (False, None, '', str(e))
+            # se ok, tentar validar que a sessão realmente autoriza acesso a shares administrativos
+            validated = False
+            if ok:
+                try:
+                    # testar admin$ e C$ via PowerShell; se qualquer um listar, consideramos validação
+                    shares = [f"\\\\{host}\\admin$", f"\\\\{host}\\C$"]
+                    for s in shares:
+                        try:
+                            # comando PowerShell que retorna 0 em sucesso, 1 em falha
+                            ps_cmd = [
+                                'powershell', '-NoProfile', '-Command',
+                                f"Try {{ Get-ChildItem -Path '{s}' -ErrorAction Stop | Out-Null; exit 0 }} Catch {{ exit 1 }}"
+                            ]
+                            p2 = subprocess.run(ps_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
+                            if p2.returncode == 0:
+                                validated = True
+                                break
+                        except Exception:
+                            continue
+                except Exception:
+                    validated = False
+            # desconectar para não deixar sessão mapeada
+            try:
+                subprocess.run(['net', 'use', target, '/delete'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+            except Exception:
+                pass
+            # considerar como ok somente se a validação adicional passar
+            if ok and not validated:
+                ok = False
+                # ajustar mensagem de erro se necessário
+                if not err:
+                    err = 'verificacao_de_share_falhou'
+            return (ok, rc, out, err)
+        except Exception as e:
+            return (False, None, '', str(e))
 
     # collection
     def start_collection(self):
@@ -1057,6 +1133,227 @@ class CSInfoGUI(tk.Tk):
                     self.lbl_progress.configure(text='Pronto')
                 except Exception:
                     pass
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _on_tree_right_click(self, event):
+        try:
+            # identificar item sob o cursor
+            iid = self.tree.identify_row(event.y)
+            if not iid:
+                return
+            # selecionar o item clicado
+            try:
+                self.tree.selection_set(iid)
+            except Exception:
+                pass
+            vals = self.tree.item(iid, 'values')
+            if not vals:
+                return
+            status = (vals[2] if len(vals) > 2 else '').strip().upper()
+            # ativar menu somente se ONLINE e se as credenciais administrativas forem validadas
+            try:
+                user = (self.ent_user.get() or '').strip()
+                passwd = (self.ent_pass.get() or '')
+            except Exception:
+                user = ''
+                passwd = ''
+
+            # estado inicial: desabilitar ações por padrão
+            try:
+                self.tree_menu.entryconfigure('Reiniciar', state='disabled')
+            except Exception:
+                pass
+            try:
+                self.tree_menu.entryconfigure('Desligar', state='disabled')
+            except Exception:
+                pass
+
+            # se não estiver ONLINE, mantém ambos desabilitados
+            if status != 'ONLINE':
+                pass
+            else:
+                # se houver credenciais preenchidas, realizar verificação assíncrona para habilitar ações
+                if user and passwd:
+                    host_to_check = (vals[0] or '').strip().upper()
+                    def _verify_and_enable_both():
+                        try:
+                            result = self._verify_admin_credentials(host_to_check, user, passwd)
+                            try:
+                                ok, rc, out, err = (result if isinstance(result, tuple) else (bool(result), None, '', ''))
+                            except Exception:
+                                ok, rc, out, err = (False, None, '', '')
+                            try:
+                                # somente aplicar o resultado se ainda estivermos com a mesma seleção
+                                try:
+                                    cur_sel = self.tree.selection()
+                                    if not cur_sel:
+                                        return
+                                    cur_vals = self.tree.item(cur_sel[0], 'values')
+                                    cur_name = (cur_vals[0] if cur_vals else '')
+                                    if not cur_name or cur_name.strip().upper() != host_to_check:
+                                        return
+                                    # também garantir que os campos de credenciais não mudaram durante a verificação
+                                    try:
+                                        cur_user = (self.ent_user.get() or '').strip()
+                                        cur_pass = (self.ent_pass.get() or '')
+                                        if cur_user != user or cur_pass != passwd:
+                                            # credenciais alteradas enquanto verificávamos: abortar
+                                            return
+                                    except Exception:
+                                        return
+                                except Exception:
+                                    return
+                                state = 'normal' if ok else 'disabled'
+                                try:
+                                    self.tree_menu.entryconfigure('Reiniciar', state=state)
+                                except Exception:
+                                    pass
+                                try:
+                                    self.tree_menu.entryconfigure('Desligar', state=state)
+                                except Exception:
+                                    pass
+                                # log detalhado do resultado para depuração
+                                try:
+                                    if ok:
+                                        self._append_output(f'Credenciais confirmadas para {host_to_check} (rc={rc})')
+                                    else:
+                                        self._append_output(f'Falha na verificação para {host_to_check} (rc={rc}) stderr={err.strip()}')
+                                except Exception:
+                                    pass
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+                    try:
+                        threading.Thread(target=_verify_and_enable_both, daemon=True).start()
+                    except Exception:
+                        pass
+                else:
+                    # sem credenciais, mantém ambos desabilitados
+                    pass
+            try:
+                # mostrar o menu no ponto do clique
+                self.tree_menu.tk_popup(event.x_root, event.y_root)
+            except Exception:
+                pass
+            finally:
+                try:
+                    self.tree_menu.grab_release()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _on_context_restart(self):
+        # obtém a seleção e inicia reinício em thread
+        try:
+            sel = self.tree.selection()
+            if not sel:
+                return
+            vals = self.tree.item(sel[0], 'values')
+            if not vals:
+                return
+            name = (vals[0] or '').strip()
+            if not name:
+                return
+            # (aviso informativo removido por solicitação) — mantém apenas a confirmação final
+            # confirmar ação
+            if not messagebox.askyesno('Reiniciar', f'Deseja reiniciar a máquina "{name}" agora?'):
+                return
+            # executar comando em thread para não bloquear a GUI
+            def _runner():
+                try:
+                    cmd = ['shutdown', '/r', '/m', f'\\\\{name}', '/t', '0', '/f']
+                    try:
+                        self._append_output(f'Executando: {" ".join(cmd)}')
+                    except Exception:
+                        pass
+                    # chamar subprocess
+                    try:
+                        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        out = proc.stdout or ''
+                        err = proc.stderr or ''
+                        if out:
+                            try:
+                                self._append_output(out.strip())
+                            except Exception:
+                                pass
+                        if err:
+                            try:
+                                self._append_output(f'Erro: {err.strip()}')
+                            except Exception:
+                                pass
+                        try:
+                            messagebox.showinfo('Reiniciar', f'Comando enviado para {name}.')
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        try:
+                            self._append_output(f'Erro ao executar reinício: {e}')
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            try:
+                threading.Thread(target=_runner, daemon=True).start()
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _on_context_shutdown(self):
+        # obtém a seleção e inicia desligamento em thread
+        try:
+            sel = self.tree.selection()
+            if not sel:
+                return
+            vals = self.tree.item(sel[0], 'values')
+            if not vals:
+                return
+            name = (vals[0] or '').strip()
+            if not name:
+                return
+            # confirmar ação
+            if not messagebox.askyesno('Desligar', f'Deseja desligar a máquina "{name}" agora?'):
+                return
+            # executar comando em thread para não bloquear a GUI
+            def _runner_shutdown():
+                try:
+                    cmd = ['shutdown', '/s', '/m', f'\\{name}', '/t', '0', '/f']
+                    try:
+                        self._append_output(f'Executando: {" ".join(cmd)}')
+                    except Exception:
+                        pass
+                    try:
+                        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        out = proc.stdout or ''
+                        err = proc.stderr or ''
+                        if out:
+                            try:
+                                self._append_output(out.strip())
+                            except Exception:
+                                pass
+                        if err:
+                            try:
+                                self._append_output(f'Erro: {err.strip()}')
+                            except Exception:
+                                pass
+                        try:
+                            messagebox.showinfo('Desligar', f'Comando enviado para {name}.')
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        try:
+                            self._append_output(f'Erro ao executar desligamento: {e}')
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            try:
+                threading.Thread(target=_runner_shutdown, daemon=True).start()
             except Exception:
                 pass
         except Exception:
