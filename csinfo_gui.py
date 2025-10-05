@@ -31,6 +31,12 @@ try:
 except Exception:
     __version__ = '0.0.0'
 
+# assets
+ASSETS_DIR = os.path.join(os.path.dirname(__file__), 'assets')
+APP_ICON_ICO = os.path.join(ASSETS_DIR, 'app.ico')
+APP_ICON_PNG = os.path.join(ASSETS_DIR, 'ico.png')
+APP_LOGO = APP_ICON_PNG  # usado no relatório PDF
+
 
 def get_appdata_path():
     if sys.platform.startswith('win'):
@@ -85,7 +91,23 @@ class Tooltip:
 class CSInfoGUI(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title(f'CSInfo GUI v{__version__}')
+        # título e icon
+        self.title(f'CSInfo v{__version__}')
+        try:
+            # preferir ico para exe; para Tkinter usar PhotoImage para PNG
+            if os.path.exists(APP_ICON_PNG):
+                try:
+                    img = tk.PhotoImage(file=APP_ICON_PNG)
+                    self.iconphoto(False, img)
+                except Exception:
+                    pass
+            elif os.path.exists(APP_ICON_ICO) and sys.platform.startswith('win'):
+                try:
+                    self.iconbitmap(APP_ICON_ICO)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         self.geometry('980x640')
 
         # state
@@ -185,8 +207,17 @@ class CSInfoGUI(tk.Tk):
         self.rb_both = ttk.Radiobutton(self.export_frame, text='Ambos', value='ambos', variable=self.export_var, command=self._update_export_button_state)
         self.rb_both.pack(side='left')
 
-        self.btn_export = ttk.Button(left, text='Exportar', command=self._do_export, state='disabled')
+        self.btn_export = ttk.Button(left, text='Exportar (F10)', command=self._do_export, state='disabled')
         self.btn_export.pack(fill='x', pady=(8, 0))
+        # opção para abrir automaticamente a pasta do arquivo exportado (inicialmente desabilitada até haver coleta)
+        self.open_export_dir_var = tk.BooleanVar(value=False)
+        try:
+            self.chk_open_export_dir = ttk.Checkbutton(left, text='Listar diretório automaticamente', variable=self.open_export_dir_var, state='disabled')
+            self.chk_open_export_dir.pack(anchor='w', pady=(6, 0))
+            # separador logo abaixo do checkbox
+            ttk.Separator(left, orient='horizontal').pack(fill='x', pady=(6, 8))
+        except Exception:
+            pass
         try:
             self.bind('<F10>', lambda e: self._do_export())
             Tooltip(self.btn_export, 'Exportar relatório (F10)')
@@ -262,6 +293,17 @@ class CSInfoGUI(tk.Tk):
 
         rodape = tk.Label(self, text='CSInfo GUI', font=('Segoe UI', 8), fg='#666')
         rodape.pack(side='bottom', pady=(0, 6), fill='x')
+
+        # topo com logotipo, nome e subtítulo
+        try:
+            top_frame = ttk.Frame(self)
+            top_frame.place(x=8, y=6)
+            # logo interno removido para evitar duplicidade com o caption da janela
+            hdr = ttk.Frame(top_frame)
+            hdr.pack(side='left')
+            # label de título removida: a caption da janela (self.title) será usada no topo
+        except Exception:
+            pass
 
     # persistence
     def load_machine_list(self):
@@ -441,6 +483,14 @@ class CSInfoGUI(tk.Tk):
                 self._update_export_button_state()
             except Exception:
                 pass
+            try:
+                if getattr(self, 'chk_open_export_dir', None) is not None:
+                    try:
+                        self.chk_open_export_dir.configure(state='disabled')
+                    except Exception:
+                        pass
+            except Exception:
+                pass
             threading.Thread(target=self._ping_single_and_queue, args=(name,), daemon=True).start()
         except Exception:
             pass
@@ -497,6 +547,14 @@ class CSInfoGUI(tk.Tk):
             # desabilitar botão export enquanto não houver coleta
             try:
                 self.btn_export.configure(state='disabled')
+            except Exception:
+                pass
+            try:
+                if getattr(self, 'chk_open_export_dir', None) is not None:
+                    try:
+                        self.chk_open_export_dir.configure(state='disabled')
+                    except Exception:
+                        pass
             except Exception:
                 pass
             # limpar progresso mantido
@@ -875,6 +933,18 @@ class CSInfoGUI(tk.Tk):
                                 self.btn_export.configure(state='normal')
                         except Exception:
                             pass
+                    # habilitar checkbox de abrir diretório automático após coleta bem-sucedida
+                    try:
+                        if getattr(self, 'chk_open_export_dir', None) is not None:
+                            try:
+                                if self.last_lines:
+                                    self.chk_open_export_dir.configure(state='normal')
+                                else:
+                                    self.chk_open_export_dir.configure(state='disabled')
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
                 elif kind == 'error':
                     self._processing = False
                     self._set_controls_state('normal')
@@ -897,6 +967,7 @@ class CSInfoGUI(tk.Tk):
         widgets = [
             self.ent_computer, self.ent_alias, self.ent_user, self.ent_pass,
             getattr(self, 'export_frame', None), self.btn_save, self.btn_delete, self.btn_export,
+            getattr(self, 'chk_open_export_dir', None),
             self.btn_start, getattr(self, 'btn_new', None), getattr(self, 'btn_open_folder', None), getattr(self, 'btn_refresh', None), getattr(self, 'tree', None)
         ]
         for w in widgets:
@@ -1049,10 +1120,21 @@ class CSInfoGUI(tk.Tk):
             return re.sub(r'[^0-9A-Za-z_.-]+', '_', str(s or ''))
 
         base = f"Info_maquina_{_safe(alias) + '_' if alias else ''}{_safe(comp)}_v{__version__}"
-        folder = os.getcwd()
+        base_cwd = os.getcwd()
+        # definir pastas de saída por tipo
+        pdf_folder = os.path.join(base_cwd, 'Relatorio', 'PDF')
+        txt_folder = os.path.join(base_cwd, 'Relatorio', 'TXT')
+        try:
+            os.makedirs(pdf_folder, exist_ok=True)
+        except Exception:
+            pass
+        try:
+            os.makedirs(txt_folder, exist_ok=True)
+        except Exception:
+            pass
         try:
             if fmt in ('txt', 'ambos'):
-                p = os.path.join(folder, base + '.txt')
+                p = os.path.join(txt_folder, base + '.txt')
                 try:
                     if csinfo and hasattr(csinfo, 'write_report'):
                         try:
@@ -1067,7 +1149,7 @@ class CSInfoGUI(tk.Tk):
                     messagebox.showerror('Exportar', f'Erro ao escrever TXT: {e}')
                     return
             if fmt in ('pdf', 'ambos'):
-                p = os.path.join(folder, base + '.pdf')
+                p = os.path.join(pdf_folder, base + '.pdf')
                 try:
                     if csinfo and hasattr(csinfo, 'write_pdf_report'):
                         try:
@@ -1076,10 +1158,27 @@ class CSInfoGUI(tk.Tk):
                                 csinfo.__version__ = __version__
                             except Exception:
                                 pass
+                            # também informar logo e nome do app
+                            try:
+                                csinfo.__logo_path__ = APP_LOGO
+                            except Exception:
+                                pass
+                            try:
+                                csinfo.__app_name__ = 'CSInfo'
+                            except Exception:
+                                pass
                             csinfo.write_pdf_report(p, self.last_lines, comp)
                         except TypeError:
                             try:
                                 csinfo.__version__ = __version__
+                            except Exception:
+                                pass
+                            try:
+                                csinfo.__logo_path__ = APP_LOGO
+                            except Exception:
+                                pass
+                            try:
+                                csinfo.__app_name__ = 'CSInfo'
                             except Exception:
                                 pass
                             csinfo.write_pdf_report(p, self.last_lines)
@@ -1090,11 +1189,29 @@ class CSInfoGUI(tk.Tk):
                 except Exception as e:
                     messagebox.showerror('Exportar', f'Erro ao escrever PDF: {e}')
                     return
+            # se opção de abrir pasta estiver marcada, abrir a pasta onde o(s) arquivo(s) foram salvos
             try:
-                if sys.platform.startswith('win'):
-                    os.startfile(folder)
-                else:
-                    subprocess.run(['xdg-open', folder])
+                if getattr(self, 'open_export_dir_var', None) and self.open_export_dir_var.get():
+                    try:
+                        # abrir a pasta apropriada dependendo do formato selecionado
+                        if fmt == 'pdf':
+                            os.startfile(pdf_folder)
+                        elif fmt == 'txt':
+                            os.startfile(txt_folder)
+                        else:
+                            # ambos: abrir a pasta raiz Relatorio
+                            os.startfile(os.path.join(base_cwd, 'Relatorio'))
+                    except Exception:
+                        try:
+                            # fallback para explorer
+                            if fmt == 'pdf':
+                                subprocess.Popen(['explorer', pdf_folder])
+                            elif fmt == 'txt':
+                                subprocess.Popen(['explorer', txt_folder])
+                            else:
+                                subprocess.Popen(['explorer', os.path.join(base_cwd, 'Relatorio')])
+                        except Exception:
+                            pass
             except Exception:
                 pass
             messagebox.showinfo('Exportar', 'Exportação concluída')
