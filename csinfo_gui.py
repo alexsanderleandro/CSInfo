@@ -26,6 +26,10 @@ try:
     import csinfo
 except Exception:
     csinfo = None
+try:
+    from version import __version__
+except Exception:
+    __version__ = '0.0.0'
 
 
 def get_appdata_path():
@@ -81,7 +85,7 @@ class Tooltip:
 class CSInfoGUI(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('CSInfo GUI')
+        self.title(f'CSInfo GUI v{__version__}')
         self.geometry('980x640')
 
         # state
@@ -183,6 +187,11 @@ class CSInfoGUI(tk.Tk):
 
         self.btn_export = ttk.Button(left, text='Exportar', command=self._do_export, state='disabled')
         self.btn_export.pack(fill='x', pady=(8, 0))
+        try:
+            self.bind('<F10>', lambda e: self._do_export())
+            Tooltip(self.btn_export, 'Exportar relatório (F10)')
+        except Exception:
+            pass
 
         self.btn_open_folder = ttk.Button(left, text='Abrir pasta de máquinas', command=self.open_machine_json_folder)
         self.btn_open_folder.pack(fill='x', pady=(8, 0))
@@ -547,7 +556,8 @@ class CSInfoGUI(tk.Tk):
         host = host.strip()
         try:
             if sys.platform.startswith('win'):
-                proc = subprocess.run(['ping', '-n', '1', '-w', '1000', host], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+                proc = subprocess.run(['ping', '-n', '1', '-w', '1000', host], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
                 return proc.returncode == 0
             else:
                 proc = subprocess.run(['ping', '-c', '1', '-W', '1', host], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -639,13 +649,15 @@ class CSInfoGUI(tk.Tk):
             target = f"\\\\{host}\\ipc$"
             # limpar conexão existente (se houver) para forçar nova autenticação
             try:
-                subprocess.run(['net', 'use', target, '/delete'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+                creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+                subprocess.run(['net', 'use', target, '/delete'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2, creationflags=creationflags)
             except Exception:
                 pass
             # incluir /persistent:no para evitar mapeamentos persistentes
             cmd = ['net', 'use', target, passwd, f'/user:{user}', '/persistent:no']
             try:
-                proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout)
+                creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+                proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout, creationflags=creationflags)
                 rc = proc.returncode
                 out = proc.stdout or ''
                 err = proc.stderr or ''
@@ -661,23 +673,25 @@ class CSInfoGUI(tk.Tk):
                     # testar admin$ e C$ via PowerShell; se qualquer um listar, consideramos validação
                     shares = [f"\\\\{host}\\admin$", f"\\\\{host}\\C$"]
                     for s in shares:
-                        try:
-                            # comando PowerShell que retorna 0 em sucesso, 1 em falha
-                            ps_cmd = [
-                                'powershell', '-NoProfile', '-Command',
-                                f"Try {{ Get-ChildItem -Path '{s}' -ErrorAction Stop | Out-Null; exit 0 }} Catch {{ exit 1 }}"
-                            ]
-                            p2 = subprocess.run(ps_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
-                            if p2.returncode == 0:
-                                validated = True
-                                break
-                        except Exception:
-                            continue
+                            try:
+                                # comando PowerShell que retorna 0 em sucesso, 1 em falha
+                                ps_cmd = [
+                                    'powershell', '-NoProfile', '-Command',
+                                    f"Try {{ Get-ChildItem -Path '{s}' -ErrorAction Stop | Out-Null; exit 0 }} Catch {{ exit 1 }}"
+                                ]
+                                creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+                                p2 = subprocess.run(ps_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5, creationflags=creationflags)
+                                if p2.returncode == 0:
+                                    validated = True
+                                    break
+                            except Exception:
+                                continue
                 except Exception:
                     validated = False
             # desconectar para não deixar sessão mapeada
             try:
-                subprocess.run(['net', 'use', target, '/delete'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+                creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+                subprocess.run(['net', 'use', target, '/delete'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2, creationflags=creationflags)
             except Exception:
                 pass
             # considerar como ok somente se a validação adicional passar
@@ -741,10 +755,8 @@ class CSInfoGUI(tk.Tk):
                         pass
                 try:
                     if csinfo:
-                        # export_var contém 'pdf', 'txt' ou 'ambos'
-                        expv = self.export_var.get() if getattr(self, 'export_var', None) is not None else None
-                        csinfo.main(export_type=(expv if expv else None),
-                                    barra_callback=barra_callback,
+                        # Não pedir export automático ao backend aqui; o usuário deve clicar em Exportar
+                        csinfo.main(barra_callback=barra_callback,
                                     computer_name=computer,
                                     machine_alias=alias)
                     else:
@@ -1036,7 +1048,7 @@ class CSInfoGUI(tk.Tk):
                 pass
             return re.sub(r'[^0-9A-Za-z_.-]+', '_', str(s or ''))
 
-        base = f"Info_maquina_{_safe(alias) + '_' if alias else ''}{_safe(comp)}"
+        base = f"Info_maquina_{_safe(alias) + '_' if alias else ''}{_safe(comp)}_v{__version__}"
         folder = os.getcwd()
         try:
             if fmt in ('txt', 'ambos'):
@@ -1059,8 +1071,17 @@ class CSInfoGUI(tk.Tk):
                 try:
                     if csinfo and hasattr(csinfo, 'write_pdf_report'):
                         try:
+                            # propagar versão do front-end para o backend para que o cabeçalho PDF mostre a versão correta
+                            try:
+                                csinfo.__version__ = __version__
+                            except Exception:
+                                pass
                             csinfo.write_pdf_report(p, self.last_lines, comp)
                         except TypeError:
+                            try:
+                                csinfo.__version__ = __version__
+                            except Exception:
+                                pass
                             csinfo.write_pdf_report(p, self.last_lines)
                     else:
                         with open(p, 'w', encoding='utf-8') as fh:
@@ -1266,14 +1287,15 @@ class CSInfoGUI(tk.Tk):
             # executar comando em thread para não bloquear a GUI
             def _runner():
                 try:
-                    cmd = ['shutdown', '/r', '/m', f'\\\\{name}', '/t', '0', '/f']
+                    cmd = ['shutdown', '/r', '/m', f'\\{name}', '/t', '0', '/f']
                     try:
                         self._append_output(f'Executando: {" ".join(cmd)}')
                     except Exception:
                         pass
                     # chamar subprocess
                     try:
-                        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+                        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=creationflags)
                         out = proc.stdout or ''
                         err = proc.stderr or ''
                         if out:
@@ -1328,7 +1350,8 @@ class CSInfoGUI(tk.Tk):
                     except Exception:
                         pass
                     try:
-                        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+                        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=creationflags)
                         out = proc.stdout or ''
                         err = proc.stderr or ''
                         if out:
