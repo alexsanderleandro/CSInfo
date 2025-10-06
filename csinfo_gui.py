@@ -21,6 +21,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from tkinter.scrolledtext import ScrolledText
 import re
+from datetime import datetime
 
 try:
     import csinfo
@@ -1110,7 +1111,28 @@ class CSInfoGUI(tk.Tk):
             return
         fmt = self.export_var.get() if getattr(self, 'export_var', None) is not None else 'pdf'
         alias = (self.ent_alias.get() or '').strip() or None
-        comp = (self._last_collection_computer or (self.ent_computer.get() or '').strip() or '')
+        # Determinar nome da máquina para o arquivo de exportação:
+        # 1) usar última coleta conhecida (self._last_collection_computer)
+        # 2) se ausente, tentar extrair das linhas coletadas (procura por 'Nome do computador:')
+        # 3) fallback para o campo de entrada
+        # 4) fallback para hostname
+        comp_field = (self.ent_computer.get() or '').strip()
+        comp_name = None
+        if getattr(self, '_last_collection_computer', None):
+            comp_name = self._last_collection_computer
+        else:
+            # tentar extrair das linhas da última coleta
+            try:
+                for ln in (self.last_lines or []):
+                    if isinstance(ln, str) and ln.strip().startswith('Nome do computador'):
+                        parts = ln.split(':', 1)
+                        if len(parts) > 1 and parts[1].strip():
+                            comp_name = parts[1].strip()
+                            break
+            except Exception:
+                comp_name = None
+        if not comp_name:
+            comp_name = comp_field or os.environ.get('COMPUTERNAME') or os.uname().nodename if hasattr(os, 'uname') else comp_field or os.environ.get('COMPUTERNAME') or os.path.basename(sys.executable)
 
         def _safe(s):
             try:
@@ -1120,7 +1142,9 @@ class CSInfoGUI(tk.Tk):
                 pass
             return re.sub(r'[^0-9A-Za-z_.-]+', '_', str(s or ''))
 
-        base = f"Info_maquina_{_safe(alias) + '_' if alias else ''}{_safe(comp)}_v{__version__}"
+        # timestamp no formato ddMMyyyyHHMM (ex: 061020251430)
+        ts = datetime.now().strftime('%d%m%Y%H%M')
+        base = f"Info_maquina_{_safe(alias) + '_' if alias else ''}{_safe(comp_name)}_{ts}"
         base_cwd = os.getcwd()
         # definir pastas de saída por tipo
         pdf_folder = os.path.join(base_cwd, 'Relatorio', 'PDF')
@@ -1168,7 +1192,8 @@ class CSInfoGUI(tk.Tk):
                                 csinfo.__app_name__ = 'CSInfo'
                             except Exception:
                                 pass
-                            csinfo.write_pdf_report(p, self.last_lines, comp)
+                            # usar comp_name (resolvido acima) como nome da máquina
+                            csinfo.write_pdf_report(p, self.last_lines, comp_name)
                         except TypeError:
                             try:
                                 csinfo.__version__ = __version__
