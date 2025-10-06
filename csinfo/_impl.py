@@ -1988,6 +1988,13 @@ def write_pdf_report(path, lines, computer_name):
         # Adiciona espaçamento extra no início do story (aplica na primeira página)
         story.append(Spacer(1, 18))
 
+        # carregar mapeamento de cores definido pelo front-end, se presente
+        try:
+            import csinfo as _cs
+            pdf_field_colors = getattr(_cs, '__pdf_field_colors__', {}) or {}
+        except Exception:
+            pdf_field_colors = {}
+
         # Processar cada linha exatamente como no TXT
         for idx, line in enumerate(filtered_lines):
             line_stripped = line.strip()
@@ -2029,7 +2036,47 @@ def write_pdf_report(path, lines, computer_name):
                     # Verificar se o início (sem número) corresponde a algum prefixo importante
                     left_check = re.sub(r"\s+\d+$", '', left_clean)  # remove sufixos numéricos como 'Antivírus 1'
                     if any(left_check.startswith(p) for p in important_prefixes):
-                        paragraph_text = f"<b>{left_clean}:</b> {right_clean}"
+                        # verificar se há cor específica para este campo
+                        color = None
+                        try:
+                            # checar match exato primeiro, depois por prefixo sem número
+                            color = pdf_field_colors.get(left_clean) or pdf_field_colors.get(left_check)
+                        except Exception:
+                            color = None
+
+                        # Campos que devem aparecer com fundo cinza 20%
+                        try:
+                            special_bg_keys = {
+                                'Nome do computador',
+                                'Tipo',
+                                'Versão do sistema operacional',
+                                'Antivírus',
+                                'Memória RAM total',
+                                'Processador'
+                            }
+                            if left_check in special_bg_keys or left_clean in special_bg_keys:
+                                # conteúdo da célula: label em negrito + valor
+                                cell_para = Paragraph(f"<b>{left_clean}:</b> {right_clean}", normal_style)
+                                # largura útil da página (mesma margem usada no frame)
+                                table_width = A4[0] - inch
+                                tbl = Table([[cell_para]], colWidths=[table_width])
+                                tbl.setStyle(TableStyle([
+                                    ('BACKGROUND', (0, 0), (0, 0), colors.Color(0.8, 0.8, 0.8)),
+                                    ('LEFTPADDING', (0, 0), (0, 0), 6),
+                                    ('RIGHTPADDING', (0, 0), (0, 0), 6),
+                                    ('TOPPADDING', (0, 0), (0, 0), 4),
+                                    ('BOTTOMPADDING', (0, 0), (0, 0), 4),
+                                ]))
+                                story.append(tbl)
+                                continue
+                        except Exception:
+                            # se qualquer problema ocorrer, voltar ao comportamento padrão
+                            pass
+
+                        if color:
+                            paragraph_text = f"<font color=\"{color}\"><b>{left_clean}:</b> {right_clean}</font>"
+                        else:
+                            paragraph_text = f"<b>{left_clean}:</b> {right_clean}"
                         story.append(Paragraph(paragraph_text, normal_style))
                         continue
                 else:
@@ -2037,7 +2084,45 @@ def write_pdf_report(path, lines, computer_name):
                     for p in important_prefixes:
                         if line_stripped.startswith(p) and len(line_stripped) <= len(p) + 10:
                             # destacar toda a linha
-                            story.append(Paragraph(f"<b>{clean_text(line_stripped)}</b>", normal_style))
+                            # aplicar cor se definida
+                            try:
+                                color = pdf_field_colors.get(line_stripped) or pdf_field_colors.get(re.sub(r"\s+\d+$", '', line_stripped))
+                            except Exception:
+                                color = None
+                            # aplicar fundo cinza também para chaves especiais
+                            try:
+                                special_bg_keys = {
+                                    'Nome do computador',
+                                    'Tipo',
+                                    'Versão do sistema operacional',
+                                    'Antivírus',
+                                    'Memória RAM total',
+                                    'Processador'
+                                }
+                                if re.sub(r"\s+\d+$", '', line_stripped) in special_bg_keys or line_stripped in special_bg_keys:
+                                    cell_para = Paragraph(f"<b>{clean_text(line_stripped)}</b>", normal_style)
+                                    table_width = A4[0] - inch
+                                    tbl = Table([[cell_para]], colWidths=[table_width])
+                                    tbl.setStyle(TableStyle([
+                                        ('BACKGROUND', (0, 0), (0, 0), colors.Color(0.8, 0.8, 0.8)),
+                                        ('LEFTPADDING', (0, 0), (0, 0), 6),
+                                        ('RIGHTPADDING', (0, 0), (0, 0), 6),
+                                        ('TOPPADDING', (0, 0), (0, 0), 4),
+                                        ('BOTTOMPADDING', (0, 0), (0, 0), 4),
+                                    ]))
+                                    story.append(tbl)
+                                    break
+                            except Exception:
+                                # fallback para parágrafo simples
+                                if color:
+                                    story.append(Paragraph(f"<font color=\"{color}\"><b>{clean_text(line_stripped)}</b></font>", normal_style))
+                                else:
+                                    story.append(Paragraph(f"<b>{clean_text(line_stripped)}</b>", normal_style))
+                                break
+                            if color:
+                                story.append(Paragraph(f"<font color=\"{color}\"><b>{clean_text(line_stripped)}</b></font>", normal_style))
+                            else:
+                                story.append(Paragraph(f"<b>{clean_text(line_stripped)}</b>", normal_style))
                             break
                     else:
                         story.append(Paragraph(clean_text(line_stripped), normal_style))

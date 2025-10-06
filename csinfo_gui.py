@@ -292,7 +292,7 @@ class CSInfoGUI(tk.Tk):
         self.lbl_progress = ttk.Label(bar_fr, text='Pronto')
         self.lbl_progress.pack(side='right')
 
-        rodape = tk.Label(self, text='CSInfo GUI', font=('Segoe UI', 8), fg='#666')
+        rodape = tk.Label(self, text='CSInfo by CEOsoftware', font=('Segoe UI', 8), fg='#666')
         rodape.pack(side='bottom', pady=(0, 6), fill='x')
 
         # topo com logotipo, nome e subtítulo

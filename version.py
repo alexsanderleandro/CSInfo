@@ -1,3 +1,3 @@
 """Arquivo simples que expõe a versão do aplicativo."""
 
-__version__ = "1.0.1"
+__version__ = "25.10.06.01"
