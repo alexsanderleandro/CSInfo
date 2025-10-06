@@ -1146,6 +1146,23 @@ class CSInfoGUI(tk.Tk):
         ts = datetime.now().strftime('%d%m%Y%H%M')
         base = f"Info_maquina_{_safe(alias) + '_' if alias else ''}{_safe(comp_name)}_{ts}"
         base_cwd = os.getcwd()
+        # Propagar metadados do front-end para o backend antes de quaisquer exports
+        try:
+            if csinfo:
+                try:
+                    csinfo.__version__ = __version__
+                except Exception:
+                    pass
+                try:
+                    csinfo.__logo_path__ = APP_LOGO
+                except Exception:
+                    pass
+                try:
+                    csinfo.__app_name__ = 'CSInfo'
+                except Exception:
+                    pass
+        except Exception:
+            pass
         # definir pastas de saída por tipo
         pdf_folder = os.path.join(base_cwd, 'Relatorio', 'PDF')
         txt_folder = os.path.join(base_cwd, 'Relatorio', 'TXT')
