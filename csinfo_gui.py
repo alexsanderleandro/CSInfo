@@ -22,6 +22,8 @@ from tkinter import ttk, messagebox
 from tkinter.scrolledtext import ScrolledText
 import re
 from datetime import datetime
+import tkinter.font as tkfont
+import socket
 
 try:
     import csinfo
@@ -93,23 +95,25 @@ class CSInfoGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         # título e icon
-        self.title(f'CSInfo v{__version__}')
+        # manter título na barra do sistema (visível em Alt+Tab e na caption)
+        # o rótulo interno (`self.title_lbl`) continua sendo exibido e centralizado
+        self.title('CSInfo |  Inventário e controle de computadores')
         try:
             # preferir ico para exe; para Tkinter usar PhotoImage para PNG
-            if os.path.exists(APP_ICON_PNG):
-                try:
-                    img = tk.PhotoImage(file=APP_ICON_PNG)
-                    self.iconphoto(False, img)
-                except Exception:
-                    pass
-            elif os.path.exists(APP_ICON_ICO) and sys.platform.startswith('win'):
+            # preferir ICO no Windows para que o caption use o arquivo .ico (não usar PNG no caption)
+            if os.path.exists(APP_ICON_ICO) and sys.platform.startswith('win'):
                 try:
                     self.iconbitmap(APP_ICON_ICO)
                 except Exception:
                     pass
+            else:
+                # Não aplicar o PNG via iconphoto para evitar duplicação/overlap; manter PNG apenas para relatórios
+                pass
         except Exception:
             pass
         self.geometry('980x640')
+
+        # removida tentativa de centralizar o caption da janela (causava perda do título em fullscreen)
 
         # state
         self.queue = queue.Queue()
@@ -138,7 +142,8 @@ class CSInfoGUI(tk.Tk):
 
     def _build_ui(self):
         frm = ttk.Frame(self)
-        frm.pack(fill='both', expand=True, padx=8, pady=8)
+        # aumentar padding superior para dar espaço ao menu flutuante no topo
+        frm.pack(fill='both', expand=True, padx=8, pady=(36, 8))
 
         left = ttk.Frame(frm)
         left.pack(side='left', fill='y')
@@ -298,14 +303,78 @@ class CSInfoGUI(tk.Tk):
 
         # topo com logotipo, nome e subtítulo
         try:
+            # frame superior (espaço para título e futuros elementos). Não empacotar sobre os campos do formulário.
             top_frame = ttk.Frame(self)
-            top_frame.place(x=8, y=6)
+            # começar em x=0 para que o frame ocupe toda a largura do root
+            top_frame.place(x=0, y=6, relwidth=1.0)
+            # título interno centralizado (visível também em tela cheia)
+            try:
+                # armazenar como atributo para permitir ajustes futuros
+                self.title_lbl = ttk.Label(top_frame, text='CSInfo - Inventário e controle de computadores', font=('Segoe UI', 10, 'bold'), anchor='center')
+                self.title_lbl.place(relx=0.5, rely=0.0, anchor='n')
+            except Exception:
+                pass
             # logo interno removido para evitar duplicidade com o caption da janela
             hdr = ttk.Frame(top_frame)
             hdr.pack(side='left')
-            # label de título removida: a caption da janela (self.title) será usada no topo
+            # botão de menu no canto superior direito usando place(relx=1.0)
+            try:
+                menu_btn = ttk.Menubutton(self, text='Ajuda ▾')
+                menu = tk.Menu(menu_btn, tearoff=0)
+                menu.add_command(label='Documentação', command=lambda: self._show_help())
+                menu.add_separator()
+                menu.add_command(label='Sobre o sistema', command=lambda: self._show_about())
+                menu_btn['menu'] = menu
+                # posicionar no canto superior direito com pequena margem e deslocamento vertical
+                menu_btn.place(relx=1.0, x=-10, y=8, anchor='ne')
+            except Exception:
+                pass
         except Exception:
             pass
+
+    def _show_help(self):
+        try:
+            help_win = tk.Toplevel(self)
+            help_win.title('Ajuda - CFInfo')
+            help_win.geometry('640x420')
+            help_win.transient(self)
+            txt = ScrolledText(help_win, wrap='word', font=('Segoe UI', 10))
+            doc = """Uso do CFInfo:
+
+- Preencha o campo 'Máquina' com o nome do computador que deseja realizar a coleta de informações; deixe em branco para analisar a máquina local.
+- Use 'Apelido' para identificar a máquina na lista e nos relatórios, campo obrigatório para que a máquina possa ser salva na lista.
+- Botões: Nova, Salvar, Excluir para gerenciar a lista de máquinas.
+- Coletar (F3): inicia a coleta; enquanto coleta, a interface fica bloqueada.
+- Atualizar (F5): re-checa o status ONLINE/OFFLINE das máquinas na lista.
+- Exportar (F10): gera relatórios em TXT e/ou PDF dentro da pasta Relatorio/PDF e Relatorio/TXT.
+- Para ações administrativas (Reiniciar/Desligar), forneça credenciais de administrador e verifique que a máquina esteja ONLINE.
+- O relatório em PDF aplica destaque (fundo cinza) a campos importantes como Nome do computador, Tipo, Versão do sistema operacional, Antivírus, Memória RAM total e Processador.
+
+Local dos arquivos: A pasta 'Relatorio' será criada no diretório onde o programa é executado.
+Atalhos: F3 (Coletar), F5 (Atualizar), F10 (Exportar).
+
+- Botão Abrir pasta de máquinas: abre o diretório onde fica salvo o arquivo json com a listagem de máquinas salvas.
+"""
+            txt.insert('1.0', doc)
+            txt.configure(state='disabled')
+            txt.pack(fill='both', expand=True, padx=8, pady=8)
+            btn = ttk.Button(help_win, text='Fechar', command=help_win.destroy)
+            btn.pack(pady=6)
+        except Exception:
+            try:
+                messagebox.showinfo('Ajuda', 'Uso do CFInfo:\n\nVerifique a documentação do aplicativo ou contate o suporte.')
+            except Exception:
+                pass
+
+    def _show_about(self):
+        try:
+            info = f"CFInfo\nDesenvolvedor: CEOsoftware Sistemas de Informática Ltda\nVersão: {__version__}"
+            messagebox.showinfo('Sobre o sistema', info)
+        except Exception:
+            try:
+                messagebox.showinfo('Sobre o sistema', 'CFInfo - Desenvolvedor: CEOsoftware Sistemas de Informática Ltda')
+            except Exception:
+                pass
 
     # persistence
     def load_machine_list(self):
@@ -705,6 +774,27 @@ class CSInfoGUI(tk.Tk):
             if not sys.platform.startswith('win'):
                 # fallback simples: não conseguimos verificar no não-Windows; assume True apenas se houver credenciais
                 return (True, 0, '', '')
+            # tratar host local/loopback como válido rapidamente - não faz sentido tentar net use para a própria máquina
+            try:
+                host_low = (host or '').strip().lower()
+                local_names = {'localhost', '127.0.0.1', '::1', '.'}
+                # obter nome da máquina local (Windows: COMPUTERNAME; fallback: uname)
+                try:
+                    local_comp = os.environ.get('COMPUTERNAME', '') or ''
+                except Exception:
+                    local_comp = ''
+                if not local_comp:
+                    try:
+                        local_comp = os.uname().nodename
+                    except Exception:
+                        local_comp = ''
+                local_comp = (local_comp or '').strip().lower()
+                if host_low in local_names or (local_comp and host_low == local_comp):
+                    # considerar válido localmente - não requer validação via SMB
+                    return (True, 0, '', '')
+            except Exception:
+                # se algo falhar na detecção local, continuar com o fluxo normal
+                pass
             # executar net use \\host\ipc$ <passwd> /user:<user>
             target = f"\\\\{host}\\ipc$"
             # limpar conexão existente (se houver) para forçar nova autenticação
@@ -723,7 +813,25 @@ class CSInfoGUI(tk.Tk):
                 err = proc.stderr or ''
                 ok = rc == 0
             except subprocess.TimeoutExpired:
-                return (False, None, '', 'timeout')
+                # Se expirar, verificar se a porta SMB (445) está acessível — esta é uma causa comum
+                try:
+                    s = socket.create_connection((host, 445), timeout=1)
+                    s.close()
+                    # Porta 445 acessível mas o comando net use demorou: tentar novamente com timeout maior
+                    try:
+                        creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+                        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=8, creationflags=creationflags)
+                        rc = proc.returncode
+                        out = proc.stdout or ''
+                        err = proc.stderr or ''
+                        ok = rc == 0
+                    except subprocess.TimeoutExpired:
+                        return (False, None, '', 'timeout')
+                    except Exception as e:
+                        return (False, None, '', str(e))
+                except Exception:
+                    # SMB não acessível: retornar erro específico para ajudar diagnóstico
+                    return (False, None, '', 'smb_unreachable')
             except Exception as e:
                 return (False, None, '', str(e))
             # se ok, tentar validar que a sessão realmente autoriza acesso a shares administrativos
@@ -1447,7 +1555,9 @@ class CSInfoGUI(tk.Tk):
             # executar comando em thread para não bloquear a GUI
             def _runner():
                 try:
-                    cmd = ['shutdown', '/r', '/m', f'\\{name}', '/t', '0', '/f']
+                    # normalizar nome removendo barras iniciais e garantindo duas barras UNC
+                    safe_name = re.sub(r'^[\\/]+', '', name)
+                    cmd = ['shutdown', '/r', '/m', f'\\\\{safe_name}', '/t', '0', '/f']
                     try:
                         self._append_output(f'Executando: {" ".join(cmd)}')
                     except Exception:
@@ -1504,7 +1614,9 @@ class CSInfoGUI(tk.Tk):
             # executar comando em thread para não bloquear a GUI
             def _runner_shutdown():
                 try:
-                    cmd = ['shutdown', '/s', '/m', f'\\{name}', '/t', '0', '/f']
+                    # normalizar nome removendo barras iniciais e garantindo duas barras UNC
+                    safe_name = re.sub(r'^[\\/]+', '', name)
+                    cmd = ['shutdown', '/s', '/m', f'\\\\{safe_name}', '/t', '0', '/f']
                     try:
                         self._append_output(f'Executando: {" ".join(cmd)}')
                     except Exception:

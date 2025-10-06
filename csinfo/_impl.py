@@ -1541,10 +1541,74 @@ def is_laptop(computer_name=None):
             arr = [arr]
         for v in arr:
             if int(v) in (8,9,10,14):  # Portable/Laptop/Notebook/SubNotebook
-                return True
+                # Para evitar falsos positivos em servidores/headless, só considerar portátil
+                # se houver pelo menos um monitor detectado (notebooks normalmente reportam monitores)
+                try:
+                    mons = get_monitor_infos(computer_name)
+                    # mons retorna lista de dicts ou lista vazia; considerar portátil apenas se houver monitores válidos
+                    if mons and any(m and (m.get('Fabricante') or m.get('Modelo') or m.get('Serial')) for m in mons):
+                        return True
+                    # caso contrário, não assumir portátil apenas pelo chassi
+                except Exception:
+                    # se não for possível obter monitores, assumir conservadoramente que NÃO é laptop
+                    pass
     except Exception:
         pass
     return False
+
+def get_chassis_type_name(computer_name=None):
+    """Retorna um nome legível baseado no(s) ChassisTypes retornado(s) pelo WMI.
+
+    Mapeamento baseado na tabela comum de ChassisTypes:
+      3 -> Desktop
+      4 -> Low Profile Desktop
+      5 -> Pizza Box
+      8,9,10,14 -> Notebook / Laptop / Portable
+      12 -> Docking Station
+      16 -> Tablet
+      17 -> Convertible
+      23 -> Server
+    Se vários valores forem retornados, retorna o primeiro que bater no mapeamento.
+    Caso não seja possível determinar, retorna 'Desconhecido'.
+    """
+    try:
+        cmd = "(Get-CimInstance Win32_SystemEnclosure | Select-Object -ExpandProperty ChassisTypes | ConvertTo-Json -Compress)"
+        out = run_powershell(cmd, computer_name=computer_name)
+        arr = json.loads(out) if out else []
+        if isinstance(arr, int):
+            arr = [arr]
+    except Exception:
+        arr = []
+
+    mapping = {
+        3: 'Desktop',
+        4: 'Low Profile Desktop',
+        5: 'Pizza Box',
+        8: 'Notebook',
+        9: 'Notebook',
+        10: 'Notebook',
+        12: 'Docking Station',
+        14: 'Notebook',
+        16: 'Tablet',
+        17: 'Convertible',
+        23: 'Server'
+    }
+
+    for v in arr:
+        try:
+            iv = int(v)
+            if iv in mapping:
+                return mapping[iv]
+        except Exception:
+            continue
+
+    # fallback: se não houver chassi conhecido, tentar heurística antiga
+    try:
+        if is_laptop(computer_name):
+            return 'Notebook'
+    except Exception:
+        pass
+    return 'Desconhecido'
 
 def remove_duplicate_lines(lines):
     """Remove linhas duplicadas consecutivas, mantendo apenas a primeira ocorrência"""
@@ -1826,7 +1890,8 @@ def write_pdf_report(path, lines, computer_name):
                     img_size = 0.5 * inch
                     # drawImage usa coordenada (x, y) do canto inferior esquerdo
                     x_img = 0.6 * inch
-                    y_img = y_title - (img_size / 2)
+                    # levantar o ícone alguns pontos para melhorar alinhamento visual
+                    y_img = y_title - (img_size / 2) + (0.08 * inch)
                     try:
                         canvas.drawImage(png_path, x_img, y_img, width=img_size, height=img_size, preserveAspectRatio=True, mask='auto')
                     except Exception:
@@ -1835,14 +1900,30 @@ def write_pdf_report(path, lines, computer_name):
             except Exception:
                 pass
 
-            # Cabeçalho: apenas o título com versão (removido 'CEOsoftware Sistemas')
+            # Cabeçalho: título e versão (versão em fonte menor que o título)
             ver_text = f"v{_ver}" if _ver else "vdesconhecida"
-            canvas.setFont("Helvetica-Bold", 11)
             canvas.setFillColor(colors.navy)
-            canvas.drawCentredString(A4[0]/2, y_title, f"CSInfo - Inventário de hardware e software - {ver_text}")
+            # Título principal (mantém o tamanho/fonte atual)
+            canvas.setFont("Helvetica-Bold", 11)
+            canvas.drawCentredString(A4[0]/2, y_title, "CSInfo - Inventário de hardware e software")
+            # Versão do aplicativo posicionada à direita do título (mesma linha), em fonte menor
+            try:
+                canvas.setFont("Helvetica", 8)
+                ver_x = A4[0] - (0.6 * inch)
+                # drawRightString posiciona o final do texto em ver_x
+                canvas.drawRightString(ver_x, y_title, ver_text)
+            except Exception:
+                canvas.setFont("Helvetica-Bold", 11)
+                ver_x = A4[0] - (0.6 * inch)
+                canvas.drawRightString(ver_x, y_title, ver_text)
             canvas.setStrokeColor(colors.Color(0.7, 0.7, 0.7))
             canvas.setLineWidth(0.5)
-            canvas.line(0.5*inch, y_line, A4[0]-0.5*inch, y_line)
+            # posicionar a linha divisória logo abaixo do título/versão
+            try:
+                y_line_adj = y_title - (0.12 * inch)
+            except Exception:
+                y_line_adj = y_line
+            canvas.line(0.5*inch, y_line_adj, A4[0]-0.5*inch, y_line_adj)
             canvas.restoreState()
         # Criar template da página com cabeçalho
         template = PageTemplate(id='normal', frames=[frame], onPage=draw_header)
@@ -2005,7 +2086,25 @@ def write_pdf_report(path, lines, computer_name):
             # (Cabeçalho é desenhado pelo template; não há linhas de cabeçalho no corpo)
             # Títulos de seções com cor personalizada
             if line_stripped in section_title_styles:
-                story.append(Paragraph(f"<b>{clean_text(line_stripped)}</b>", section_title_styles[line_stripped]))
+                # Renderizar título de seção com fundo cinza 5% conforme solicitado
+                try:
+                    title_para = Paragraph(f"<b>{clean_text(line_stripped)}</b>", section_title_styles[line_stripped])
+                    table_width = A4[0] - inch
+                    tbl = Table([[title_para]], colWidths=[table_width])
+                    tbl.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (0, 0), colors.Color(0.95, 0.95, 0.95)),
+                        ('LEFTPADDING', (0, 0), (0, 0), 6),
+                        ('RIGHTPADDING', (0, 0), (0, 0), 6),
+                        ('TOPPADDING', (0, 0), (0, 0), 4),
+                        ('BOTTOMPADDING', (0, 0), (0, 0), 4),
+                    ]))
+                    story.append(tbl)
+                except Exception:
+                    # fallback simples caso algo dê errado: apenas o parágrafo
+                    try:
+                        story.append(Paragraph(f"<b>{clean_text(line_stripped)}</b>", section_title_styles[line_stripped]))
+                    except Exception:
+                        pass
                 continue
             
             # Pular o rodapé do conteúdo (será adicionado automaticamente)
@@ -2055,19 +2154,13 @@ def write_pdf_report(path, lines, computer_name):
                                 'Processador'
                             }
                             if left_check in special_bg_keys or left_clean in special_bg_keys:
-                                # conteúdo da célula: label em negrito + valor
-                                cell_para = Paragraph(f"<b>{left_clean}:</b> {right_clean}", normal_style)
-                                # largura útil da página (mesma margem usada no frame)
-                                table_width = A4[0] - inch
-                                tbl = Table([[cell_para]], colWidths=[table_width])
-                                tbl.setStyle(TableStyle([
-                                    ('BACKGROUND', (0, 0), (0, 0), colors.Color(0.8, 0.8, 0.8)),
-                                    ('LEFTPADDING', (0, 0), (0, 0), 6),
-                                    ('RIGHTPADDING', (0, 0), (0, 0), 6),
-                                    ('TOPPADDING', (0, 0), (0, 0), 4),
-                                    ('BOTTOMPADDING', (0, 0), (0, 0), 4),
-                                ]))
-                                story.append(tbl)
+                                # Novo formato solicitado: chave em fonte normal e valor em negrito, sem fundo cinza
+                                # aplicar cor apenas ao valor caso exista mapeamento
+                                if color:
+                                    paragraph_text = f"{left_clean}: <font color=\"{color}\"><b>{right_clean}</b></font>"
+                                else:
+                                    paragraph_text = f"{left_clean}: <b>{right_clean}</b>"
+                                story.append(Paragraph(paragraph_text, normal_style))
                                 continue
                         except Exception:
                             # se qualquer problema ocorrer, voltar ao comportamento padrão
@@ -2100,17 +2193,15 @@ def write_pdf_report(path, lines, computer_name):
                                     'Processador'
                                 }
                                 if re.sub(r"\s+\d+$", '', line_stripped) in special_bg_keys or line_stripped in special_bg_keys:
-                                    cell_para = Paragraph(f"<b>{clean_text(line_stripped)}</b>", normal_style)
-                                    table_width = A4[0] - inch
-                                    tbl = Table([[cell_para]], colWidths=[table_width])
-                                    tbl.setStyle(TableStyle([
-                                        ('BACKGROUND', (0, 0), (0, 0), colors.Color(0.8, 0.8, 0.8)),
-                                        ('LEFTPADDING', (0, 0), (0, 0), 6),
-                                        ('RIGHTPADDING', (0, 0), (0, 0), 6),
-                                        ('TOPPADDING', (0, 0), (0, 0), 4),
-                                        ('BOTTOMPADDING', (0, 0), (0, 0), 4),
-                                    ]))
-                                    story.append(tbl)
+                                    # Caso sem ':' — trataremos como chave isolada: renderizar chave em fonte normal (sem fundo)
+                                    try:
+                                        color = pdf_field_colors.get(line_stripped) or pdf_field_colors.get(re.sub(r"\s+\d+$", '', line_stripped))
+                                    except Exception:
+                                        color = None
+                                    if color:
+                                        story.append(Paragraph(f"<font color=\"{color}\">{clean_text(line_stripped)}</font>", normal_style))
+                                    else:
+                                        story.append(Paragraph(clean_text(line_stripped), normal_style))
                                     break
                             except Exception:
                                 # fallback para parágrafo simples
@@ -2341,7 +2432,13 @@ def main(export_type=None, barra_callback=None, computer_name=None, include_debu
     
     # LINHAS INICIAIS SOLICITADAS: Nome, Tipo, Gerado por
     add_line(f"Nome do computador: {machine}")
-    add_line(f"Tipo: {'Notebook' if is_laptop(computer_name) else 'Desktop'}")
+    # Determinar tipo com base no ChassisTypes quando possível
+    tipo_chassi = get_chassis_type_name(computer_name)
+    if tipo_chassi and tipo_chassi != 'Desconhecido':
+        add_line(f"Tipo: {tipo_chassi}")
+    else:
+        # fallback conservador: usar heurística de is_laptop
+        add_line(f"Tipo: {'Notebook' if is_laptop(computer_name) else 'Desktop'}")
     add_line(f"Gerado por: {usuario_logado}")
     add_line("")
     # (Cabeçalho visual será desenhado pelo template do PDF; não adicionamos essas linhas ao corpo)
