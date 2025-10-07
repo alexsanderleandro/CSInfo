@@ -4,6 +4,12 @@ Este arquivo contém a implementação completa que antes vivia em `csinfo.py` n
 do projeto. Foi movida para dentro do pacote para permitir importação limpa
 (`import csinfo`) e facilitar o empacotamento com PyInstaller.
 """
+"""Implementação interna do pacote csinfo.
+
+Este arquivo contém a implementação completa que antes vivia em `csinfo.py` na raiz
+do projeto. Foi movida para dentro do pacote para permitir importação limpa
+(`import csinfo`) e facilitar o empacotamento com PyInstaller.
+"""
 
 # Conteúdo migrado de csinfo.py
 import socket
@@ -1653,12 +1659,19 @@ def write_report(path, lines, include_debug=False):
     # CSInfo - Inventário de hardware e software - v{versão}
     import getpass
     user = getpass.getuser()
+    # Evitar duplicar a linha "Gerado por:" — se já existe nas linhas coletadas, não adicionamos no cabeçalho
+    try:
+        has_gerado = any((str(l) or '').strip().lower().startswith('gerado por:') for l in filtered_lines)
+    except Exception:
+        has_gerado = False
+
     header = [
         "CEOsoftware Sistemas",
         f"CSInfo - Inventário de hardware e software - v{ver if ver else 'desconhecida'}",
-        f"Gerado por: {user}",
-        "",
     ]
+    if not has_gerado:
+        header.append(f"Gerado por: {user}")
+    header.append("")
     # Sanitizar todas as linhas antes de escrever
     sanitized = [_sanitize_line(l) for l in filtered_lines]
     with open(path, 'w', encoding='utf-8-sig') as f:
@@ -1788,13 +1801,17 @@ def organize_pdf_data(lines, computer_name):
     }
 
 def write_pdf_report(path, lines, computer_name):
-    """Gera um relatório em PDF com as informações coletadas - idêntico ao TXT"""
-    # Validação simples do caminho: evita passar None para ReportLab
+    """Gera um relatório em PDF com as informações coletadas - idêntico ao TXT.
+
+    Esta versão adiciona um índice lateral (sidebar) com links para os agrupamentos
+    principais e cria bookmarks para facilitar a navegação no PDF.
+    """
     if not path:
         return False
     try:
-        from reportlab.platypus import Table, TableStyle, PageTemplate, Frame, Spacer, Paragraph
-        from reportlab.lib.enums import TA_LEFT, TA_CENTER
+        import os, sys, traceback
+        from reportlab.platypus import Table, TableStyle, PageTemplate, Frame, Spacer, Paragraph, Flowable
+        from reportlab.lib.enums import TA_LEFT
         from reportlab.platypus import BaseDocTemplate
         from reportlab.lib.units import inch
         from reportlab.platypus.doctemplate import PageBreak
@@ -1802,360 +1819,341 @@ def write_pdf_report(path, lines, computer_name):
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib import colors
         from reportlab.pdfgen import canvas
-        from reportlab.platypus.flowables import HRFlowable
-        
-        # Remover duplicatas (igual ao TXT)
+
         filtered_lines = remove_duplicate_lines(lines)
-        
-        # Criar classe personalizada para rodapé
+
+        # Canvas numerado com rodapé
         class NumberedCanvas(canvas.Canvas):
             def __init__(self, *args, **kwargs):
-                canvas.Canvas.__init__(self, *args, **kwargs)
+                super().__init__(*args, **kwargs)
                 self._saved_page_states = []
-                
+
             def showPage(self):
                 self._saved_page_states.append(dict(self.__dict__))
                 self._startPage()
-                
+
             def save(self):
-                """Adiciona informações de página em cada página"""
                 num_pages = len(self._saved_page_states)
-                for (page_num, state) in enumerate(self._saved_page_states):
+                for page_num, state in enumerate(self._saved_page_states):
                     self.__dict__.update(state)
                     self.draw_page_number(page_num + 1, num_pages)
-                    canvas.Canvas.showPage(self)
-                canvas.Canvas.save(self)
-                
-            def draw_page_number(self, page_num, total_pages):
-                """Desenha o rodapé com numeração de página e texto centralizado"""
-                # Desenhar linha fina cinza acima do rodapé
-                self.setStrokeColor(colors.Color(0.7, 0.7, 0.7))  # Cinza claro
-                self.setLineWidth(0.5)  # Linha fina
-                self.line(0.5*inch, 0.5*inch, A4[0] - 0.5*inch, 0.5*inch)  # Linha horizontal
-                
-                # Configurar fonte para rodapé - tamanho 7, cinza 75%
-                self.setFont("Helvetica", 7)
-                self.setFillColor(colors.Color(0.25, 0.25, 0.25))  # Cinza 75% (25% preto)
-                # Numeração de páginas (lado esquerdo)
-                page_text = f"Página {page_num} de {total_pages}"
-                self.drawString(0.5*inch, 0.3*inch, page_text)
+                    super().showPage()
+                super().save()
 
-                # Texto "CSInfo by CEOsoftware" centralizado (mantém apenas este texto + numeração)
+            def draw_page_number(self, page_num, total_pages):
+                self.setStrokeColor(colors.Color(0.7, 0.7, 0.7))
+                self.setLineWidth(0.5)
+                self.line(0.5 * inch, 0.5 * inch, A4[0] - 0.5 * inch, 0.5 * inch)
+                self.setFont("Helvetica", 7)
+                self.setFillColor(colors.Color(0.25, 0.25, 0.25))
+                page_text = f"Página {page_num} de {total_pages}"
+                self.drawString(0.5 * inch, 0.3 * inch, page_text)
                 footer_text = "CSInfo by CEOsoftware"
                 text_width = self.stringWidth(footer_text, "Helvetica", 7)
-                page_width = A4[0]
-                x_center = (page_width - text_width) / 2
-                self.drawString(x_center, 0.3*inch, footer_text)
-        
-        # Criar documento PDF com template personalizado
-        doc = BaseDocTemplate(path, pagesize=A4)
-        
-        # Definir frame com margens ajustadas para o rodapé
+                x_center = (A4[0] - text_width) / 2
+                self.drawString(x_center, 0.3 * inch, footer_text)
+
+        # document and layout
+        tmp_path = path + ".tmp"
+        doc = BaseDocTemplate(tmp_path, pagesize=A4)
+        sidebar_width = 1.2 * inch
+        # Não reservar espaço para o índice visível — o índice será apenas
+        # criado como bookmarks/outlines; usar a largura completa do corpo.
         frame = Frame(
-            0.5*inch,  # x1 (margem esquerda)
-            0.6*inch,  # y1 (margem inferior - espaço para rodapé)
-            A4[0] - inch,  # width (largura da página - margens)
-            A4[1] - 1.35*inch,  # altura - ajuste intermediário para o topo
+            0.5 * inch,
+            0.6 * inch,
+            A4[0] - inch,
+            A4[1] - 1.35 * inch,
             leftPadding=0,
             bottomPadding=0,
             rightPadding=0,
-            topPadding=0.15*inch  # padding superior levemente maior
+            topPadding=0.15 * inch,
         )
-        
-        # Função para desenhar cabeçalho em cada página
-        def draw_header(canvas, doc):
-            canvas.saveState()
-            # Ajusta a posição do cabeçalho para não sobrepor o conteúdo
-            y_title = A4[1]-0.7*inch if doc.page == 1 else A4[1]-0.6*inch
-            y_subtitle = A4[1]-0.9*inch if doc.page == 1 else A4[1]-0.8*inch
-            y_version = A4[1]-1.05*inch if doc.page == 1 else A4[1]-0.95*inch
-            y_line = A4[1]-0.95*inch if doc.page == 1 else A4[1]-0.85*inch
-            # Novo cabeçalho alinhado ao formato do TXT
+
+        # coletor de seções para o índice
+        toc_sections = []
+
+        class SectionAnchor(Flowable):
+            def __init__(self, name, title):
+                super().__init__()
+                self.name = name
+                self.title = title
+
+            def draw(self):
+                try:
+                    self.canv.bookmarkPage(self.name)
+                    try:
+                        self.canv.addOutlineEntry(self.title, self.name, level=0, closed=False)
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
+        def draw_header(canvas_obj, doc_obj):
+            canvas_obj.saveState()
+            y_title = A4[1] - 0.7 * inch if doc_obj.page == 1 else A4[1] - 0.6 * inch
+            canvas_obj.setFillColor(colors.navy)
+            canvas_obj.setFont("Helvetica-Bold", 11)
+            canvas_obj.drawCentredString(A4[0] / 2, y_title, "CSInfo - Inventário de hardware e software")
             try:
                 import csinfo as _cs
                 _ver = getattr(_cs, '__version__', None)
             except Exception:
                 _ver = None
-            # Tentar desenhar o ícone do app (assets/ico.png) no canto esquerdo do cabeçalho
+            ver_text = f"v{_ver}" if _ver else "vdesconhecida"
             try:
-                import sys
-                # Resolve caminho ao arquivo assets mesmo quando empacotado pelo PyInstaller
-                if getattr(sys, 'frozen', False):
-                    base = sys._MEIPASS
-                else:
-                    base = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-                png_path = os.path.join(base, 'assets', 'ico.png')
-                if os.path.exists(png_path):
-                    # tamanho do ícone em polegadas
-                    img_size = 0.5 * inch
-                    # drawImage usa coordenada (x, y) do canto inferior esquerdo
-                    x_img = 0.6 * inch
-                    # levantar o ícone alguns pontos para melhorar alinhamento visual
-                    y_img = y_title - (img_size / 2) + (0.08 * inch)
+                canvas_obj.setFont("Helvetica", 8)
+                ver_x = A4[0] - (0.6 * inch)
+                canvas_obj.drawRightString(ver_x, y_title, ver_text)
+            except Exception:
+                pass
+            canvas_obj.setStrokeColor(colors.Color(0.7, 0.7, 0.7))
+            canvas_obj.setLineWidth(0.5)
+            canvas_obj.line(0.5 * inch, y_title - (0.12 * inch), A4[0] - 0.5 * inch, y_title - (0.12 * inch))
+            canvas_obj.restoreState()
+
+        def draw_sidebar(canvas_obj, doc_obj):
+            try:
+                x0 = 0.5 * inch
+                x1 = x0 + sidebar_width - 6
+                y = A4[1] - (0.9 * inch)
+                canvas_obj.saveState()
+                try:
+                    canvas_obj.setFillColor(colors.Color(0.98, 0.98, 0.98))
+                    canvas_obj.rect(x0 - 4, 0.6 * inch, sidebar_width + 2, A4[1] - 1.6 * inch, fill=1, stroke=0)
+                except Exception:
+                    pass
+                canvas_obj.setFont('Helvetica-Bold', 9)
+                canvas_obj.setFillColor(colors.Color(0.2, 0.2, 0.2))
+                canvas_obj.drawString(x0, y, 'Índice')
+                y -= 12
+                canvas_obj.setFont('Helvetica', 8)
+                for title, dest in toc_sections:
+                    if y < 1.2 * inch:
+                        break
+                    text = title if len(title) <= 24 else title[:21] + '...'
+                    canvas_obj.setFillColor(colors.blue)
+                    canvas_obj.drawString(x0, y, text)
                     try:
-                        canvas.drawImage(png_path, x_img, y_img, width=img_size, height=img_size, preserveAspectRatio=True, mask='auto')
+                        # Use linkAbsolute to create an internal link to the named destination
+                        # signature: linkAbsolute(name, destinationname, Rect=(x1,y1,x2,y2))
+                        canvas_obj.linkAbsolute('', dest, Rect=(x0, y - 2, x1, y + 10))
                     except Exception:
-                        # se drawImage falhar (formatos), ignorar a imagem
                         pass
+                    y -= 11
+                canvas_obj.restoreState()
             except Exception:
                 pass
 
-            # Cabeçalho: título e versão (versão em fonte menor que o título)
-            ver_text = f"v{_ver}" if _ver else "vdesconhecida"
-            canvas.setFillColor(colors.navy)
-            # Título principal (mantém o tamanho/fonte atual)
-            canvas.setFont("Helvetica-Bold", 11)
-            canvas.drawCentredString(A4[0]/2, y_title, "CSInfo - Inventário de hardware e software")
-            # Versão do aplicativo posicionada à direita do título (mesma linha), em fonte menor
-            try:
-                canvas.setFont("Helvetica", 8)
-                ver_x = A4[0] - (0.6 * inch)
-                # drawRightString posiciona o final do texto em ver_x
-                canvas.drawRightString(ver_x, y_title, ver_text)
-            except Exception:
-                canvas.setFont("Helvetica-Bold", 11)
-                ver_x = A4[0] - (0.6 * inch)
-                canvas.drawRightString(ver_x, y_title, ver_text)
-            canvas.setStrokeColor(colors.Color(0.7, 0.7, 0.7))
-            canvas.setLineWidth(0.5)
-            # posicionar a linha divisória logo abaixo do título/versão
-            try:
-                y_line_adj = y_title - (0.12 * inch)
-            except Exception:
-                y_line_adj = y_line
-            canvas.line(0.5*inch, y_line_adj, A4[0]-0.5*inch, y_line_adj)
-            canvas.restoreState()
-        # Criar template da página com cabeçalho
-        template = PageTemplate(id='normal', frames=[frame], onPage=draw_header)
+        def draw_page(canvas_obj, doc_obj):
+            draw_header(canvas_obj, doc_obj)
+            # Não desenhar o índice visível nas páginas (evita repetição no corpo)
+            # draw_sidebar(canvas_obj, doc_obj)
+
+        template = PageTemplate(id='normal', frames=[frame], onPage=draw_page)
         doc.addPageTemplates([template])
-        
+
         story = []
-        
-        # Estilos
         styles = getSampleStyleSheet()
-        
-        # Estilo para cabeçalho CSInfo
-        header_style = ParagraphStyle(
-            'CSInfoHeader',
-            parent=styles['Normal'],
-            fontSize=11,
-            textColor=colors.navy,
-            alignment=TA_LEFT,
-            spaceAfter=6,
-            leading=13,
-            fontName='Helvetica-Bold'
-        )
-        
-        # Estilos para títulos de seção personalizados
+        header_style = ParagraphStyle('CSInfoHeader', parent=styles['Normal'], fontSize=10, textColor=colors.navy, alignment=TA_LEFT, spaceAfter=6, leading=13, fontName='Helvetica-Bold')
+        # Use cor neutra para títulos das seções no corpo (preto). O índice lateral manterá a cor azul.
         section_title_styles = {
-            "INFORMAÇÕES DO SISTEMA": ParagraphStyle(
-                'SectionTitleSistema',
-                parent=styles['Heading2'],
-                fontSize=10,
-                spaceAfter=6,
-                spaceBefore=6,
-                leading=12,
-                textColor=colors.Color(0.5, 0, 0),  # Vermelho escuro
-                fontName='Helvetica-Bold',
-                alignment=TA_LEFT
-            ),
-            "INFORMAÇÕES DE HARDWARE": ParagraphStyle(
-                'SectionTitleHardware',
-                parent=styles['Heading2'],
-                fontSize=10,
-                spaceAfter=6,
-                spaceBefore=6,
-                leading=12,
-                textColor=colors.Color(0, 0.35, 0),  # Verde escuro
-                fontName='Helvetica-Bold',
-                alignment=TA_LEFT
-            ),
-            "ADMINISTRADORES": ParagraphStyle(
-                'SectionTitleAdmin',
-                parent=styles['Heading2'],
-                fontSize=10,
-                spaceAfter=6,
-                spaceBefore=6,
-                leading=12,
-                textColor=colors.Color(1, 0.5, 0),  # Laranja
-                fontName='Helvetica-Bold',
-                alignment=TA_LEFT
-            ),
-            "SOFTWARES INSTALADOS": ParagraphStyle(
-                'SectionTitleSoft',
-                parent=styles['Heading2'],
-                fontSize=10,
-                spaceAfter=6,
-                spaceBefore=6,
-                leading=12,
-                textColor=colors.Color(0.7, 0.6, 0.1),  # Amarelo escuro
-                fontName='Helvetica-Bold',
-                alignment=TA_LEFT
-            ),
-            "INFORMAÇÕES DE REDE": ParagraphStyle(
-                'SectionTitleNet',
-                parent=styles['Heading2'],
-                fontSize=10,
-                spaceAfter=6,
-                spaceBefore=6,
-                leading=12,
-                textColor=colors.Color(0.1, 0.3, 0.7),  # Azul escuro
-                fontName='Helvetica-Bold',
-                alignment=TA_LEFT
-            ),
-            "SEGURANÇA DO SISTEMA": ParagraphStyle(
-                'SectionTitleSec',
-                parent=styles['Heading2'],
-                fontSize=10,
-                spaceAfter=6,
-                spaceBefore=6,
-                leading=12,
-                textColor=colors.Color(0.7, 0.1, 0.1),  # Vermelho escuro
-                fontName='Helvetica-Bold',
-                alignment=TA_LEFT
-            ),
+            "INFORMAÇÕES DO SISTEMA": ParagraphStyle('SectionTitleSistema', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.black, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "INFORMAÇÕES DE HARDWARE": ParagraphStyle('SectionTitleHardware', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.black, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "ADMINISTRADORES": ParagraphStyle('SectionTitleAdmin', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.black, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "SOFTWARES INSTALADOS": ParagraphStyle('SectionTitleSoft', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.black, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "INFORMAÇÕES DE REDE": ParagraphStyle('SectionTitleNet', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.black, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "SEGURANÇA DO SISTEMA": ParagraphStyle('SectionTitleSec', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.black, fontName='Helvetica-Bold', alignment=TA_LEFT),
         }
-        
-        # Estilo para texto normal
-        normal_style = ParagraphStyle(
-            'CustomNormal',
-            parent=styles['Normal'],
-            fontSize=9,
-            spaceAfter=2,
-            leading=11,
-            textColor=colors.black,
-            fontName='Helvetica'
-        )
-        
-        # Estilo para texto indentado (com 2 espaços)
-        indented_style = ParagraphStyle(
-            'IndentedNormal',
-            parent=styles['Normal'],
-            fontSize=9,
-            spaceAfter=2,
-            leading=11,
-            textColor=colors.black,
-            fontName='Helvetica',
-            leftIndent=12  # Indentação de 12 pontos
-        )
-        
-        # Estilo para texto muito indentado (com 4 espaços)
-        double_indented_style = ParagraphStyle(
-            'DoubleIndentedNormal',
-            parent=styles['Normal'],
-            fontSize=9,
-            spaceAfter=2,
-            leading=11,
-            textColor=colors.black,
-            fontName='Helvetica',
-            leftIndent=24  # Indentação de 24 pontos
-        )
-        
+        normal_style = ParagraphStyle('CustomNormal', parent=styles['Normal'], fontSize=9, spaceAfter=2, leading=11, textColor=colors.black, fontName='Helvetica')
+        indented_style = ParagraphStyle('IndentedNormal', parent=styles['Normal'], fontSize=9, spaceAfter=2, leading=11, textColor=colors.black, fontName='Helvetica', leftIndent=12)
+        double_indented_style = ParagraphStyle('DoubleIndentedNormal', parent=styles['Normal'], fontSize=9, spaceAfter=2, leading=11, textColor=colors.black, fontName='Helvetica', leftIndent=24)
+
         def clean_text(text):
-            """Limpa texto para PDF: remove caracteres de controle (ex: \x00) e escapa marcações"""
             if text is None:
                 return ""
-            # Converte para str e remove caracteres de controle que geram quadrados pretos
             txt = str(text)
-            # Remove caracteres de controle (0x00-0x1F, 0x7F-0x9F)
             txt = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', txt)
-            # Substituições seguras para o mini-markup do ReportLab
-            return (txt.replace('&', '&amp;')
-                       .replace('<', '&lt;')
-                       .replace('>', '&gt;')
-                       .replace('"', '&quot;')
-                       .replace("'", '&#39;'))
-        
-        # Adiciona espaçamento extra no início do story (aplica na primeira página)
-        story.append(Spacer(1, 18))
+            return (txt.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;').replace("'", '&#39;'))
 
-        # carregar mapeamento de cores definido pelo front-end, se presente
+
+        # IDENTIFICAÇÃO
+        try:
+            id_keys = {'Nome do computador': None, 'Tipo': None, 'Gerado por': None, 'Relatório gerado em': None}
+            matched_indices = set()
+            for idx, ln in enumerate(filtered_lines):
+                if not ln:
+                    continue
+                for k in list(id_keys.keys()):
+                    if ln.startswith(k):
+                        try:
+                            if ':' in ln:
+                                id_keys[k] = ln.split(':', 1)[1].strip()
+                            else:
+                                id_keys[k] = ''
+                        except Exception:
+                            id_keys[k] = ''
+                        matched_indices.add(idx)
+                        break
+            # ajustar Tipo se for linha de disco
+            try:
+                tipo_val = id_keys.get('Tipo')
+                if tipo_val and re.search(r'\bHDD\b|\bSSD\b|Interface:|\|', tipo_val, flags=re.IGNORECASE):
+                    tipo_chassi = None
+                    try:
+                        tipo_chassi = get_chassis_type_name(computer_name)
+                    except Exception:
+                        tipo_chassi = None
+                    if tipo_chassi and tipo_chassi != 'Desconhecido':
+                        id_keys['Tipo'] = tipo_chassi
+                    else:
+                        try:
+                            id_keys['Tipo'] = 'Notebook' if is_laptop(computer_name) else 'Desktop'
+                        except Exception:
+                            id_keys['Tipo'] = 'Desconhecido'
+            except Exception:
+                pass
+
+            id_title_style = ParagraphStyle('IdTitle', parent=styles['Normal'], fontSize=10, leading=12, alignment=TA_LEFT, fontName='Helvetica-Bold', textColor=colors.white)
+            id_dest = 'sec_IDENTIFICACAO'
+            toc_sections.append(('IDENTIFICAÇÃO', id_dest))
+            story.append(SectionAnchor(id_dest, 'IDENTIFICAÇÃO'))
+            title_para = Paragraph('<b>IDENTIFICAÇÃO</b>', id_title_style)
+            table_width = A4[0] - inch
+            tbl = Table([[title_para]], colWidths=[table_width])
+            tbl.setStyle(TableStyle([('BACKGROUND', (0, 0), (0, 0), colors.Color(0.5, 0.5, 0.5)), ('LEFTPADDING', (0, 0), (0, 0), 6), ('RIGHTPADDING', (0, 0), (0, 0), 6), ('TOPPADDING', (0, 0), (0, 0), 6), ('BOTTOMPADDING', (0, 0), (0, 0), 6),]))
+            story.append(tbl)
+            story.append(Spacer(1, 4))
+            for k in ('Nome do computador', 'Tipo', 'Gerado por', 'Relatório gerado em'):
+                v = id_keys.get(k)
+                if v is None:
+                    for ln in filtered_lines:
+                        if ln.startswith(k) and ':' not in ln:
+                            v = ln.strip()
+                            break
+                if v is None:
+                    continue
+                try:
+                    story.append(Paragraph(f"{clean_text(k)}: <b>{clean_text(v)}</b>", normal_style))
+                except Exception:
+                    try:
+                        story.append(Paragraph(f"{clean_text(k)}: {clean_text(v)}", normal_style))
+                    except Exception:
+                        pass
+            story.append(Spacer(1, 8))
+            try:
+                body_lines = [ln for i, ln in enumerate(filtered_lines) if i not in matched_indices]
+            except Exception:
+                body_lines = list(filtered_lines)
+        except Exception:
+            body_lines = list(filtered_lines)
+
+        # carregar cores
         try:
             import csinfo as _cs
             pdf_field_colors = getattr(_cs, '__pdf_field_colors__', {}) or {}
         except Exception:
             pdf_field_colors = {}
 
-        # Processar cada linha exatamente como no TXT
-        for idx, line in enumerate(filtered_lines):
+        # Filtrar eventuais linhas que representam o próprio índice (várias variantes)
+        def _normalize(s):
+            try:
+                import unicodedata
+                s2 = ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+                return s2.lower().strip()
+            except Exception:
+                return s.lower().strip()
+
+        index_aliases = {'indice', 'índice', 'index'}
+        cleaned_body = []
+        for ln in body_lines:
+            if not ln:
+                cleaned_body.append(ln)
+                continue
+            norm = _normalize(ln.strip())
+            # Filtrar qualquer linha que contenha a palavra 'indice' (com ou sem acento)
+            if any(alias in norm for alias in index_aliases):
+                # pular cabeçalhos explícitos do índice
+                continue
+            # pular linhas muito curtas que correspondam exatamente a títulos do toc
+            if any(_normalize(ln.strip()) == _normalize(t) for t, _ in toc_sections):
+                continue
+            cleaned_body.append(ln)
+
+        iter_lines = cleaned_body
+
+        # Sumário removido: não inserir página de sumário no documento.
+        # Os bookmarks (SectionAnchor) são mantidos para navegação via outline,
+        # mas não geramos uma página de índice visível.
+
+        for idx, line in enumerate(iter_lines):
             line_stripped = line.strip()
-            # Linha em branco
             if not line_stripped:
                 story.append(Spacer(1, 6))
                 continue
-            # (Cabeçalho é desenhado pelo template; não há linhas de cabeçalho no corpo)
-            # Títulos de seções com cor personalizada
+
+            # Ignorar linhas que sejam o título do índice lateral ou que coincidam
+            # exatamente com qualquer título do índice para evitar repetição no corpo
+            try:
+                if re.match(r'^\s*Índice\b', line_stripped, flags=re.IGNORECASE):
+                    continue
+            except Exception:
+                pass
+            try:
+                if any(line_stripped == t for t, _ in toc_sections):
+                    # já será desenhado na sidebar, não colocar no corpo
+                    continue
+            except Exception:
+                pass
+
+            # Só adicionar títulos de agrupamento reais no corpo (nunca o texto 'Índice' ou qualquer item do sidebar)
+            # Ignorar títulos que contenham 'indice' inadvertidamente
+            if any(alias in _normalize(line_stripped) for alias in index_aliases):
+                continue
             if line_stripped in section_title_styles:
-                # Renderizar título de seção com fundo cinza 5% conforme solicitado
+                destname = 'sec_' + re.sub(r'[^0-9a-zA-Z_]', '_', line_stripped).upper()
+                # Adiciona âncora para navegação
+                story.append(SectionAnchor(destname, line_stripped))
+                try:
+                    toc_sections.append((line_stripped, destname))
+                except Exception:
+                    pass
                 try:
                     title_para = Paragraph(f"<b>{clean_text(line_stripped)}</b>", section_title_styles[line_stripped])
                     table_width = A4[0] - inch
                     tbl = Table([[title_para]], colWidths=[table_width])
-                    tbl.setStyle(TableStyle([
-                        ('BACKGROUND', (0, 0), (0, 0), colors.Color(0.95, 0.95, 0.95)),
-                        ('LEFTPADDING', (0, 0), (0, 0), 6),
-                        ('RIGHTPADDING', (0, 0), (0, 0), 6),
-                        ('TOPPADDING', (0, 0), (0, 0), 4),
-                        ('BOTTOMPADDING', (0, 0), (0, 0), 4),
-                    ]))
+                    tbl.setStyle(TableStyle([('BACKGROUND', (0, 0), (0, 0), colors.Color(0.5, 0.5, 0.5)), ('LEFTPADDING', (0, 0), (0, 0), 6), ('RIGHTPADDING', (0, 0), (0, 0), 6), ('TOPPADDING', (0, 0), (0, 0), 6), ('BOTTOMPADDING', (0, 0), (0, 0), 6),]))
                     story.append(tbl)
                 except Exception:
-                    # fallback simples caso algo dê errado: apenas o parágrafo
                     try:
                         story.append(Paragraph(f"<b>{clean_text(line_stripped)}</b>", section_title_styles[line_stripped]))
                     except Exception:
                         pass
                 continue
-            
-            # Pular o rodapé do conteúdo (será adicionado automaticamente)
+
             if line_stripped == "CSInfo by CEOsoftware":
                 continue
-            
-            # Determinar o estilo baseado na indentação
-            if line.startswith("    "):  # 4 espaços - indentação dupla
-                story.append(Paragraph(clean_text(line_stripped), double_indented_style))
-            elif line.startswith("  "):   # 2 espaços - indentação simples
-                story.append(Paragraph(clean_text(line_stripped), indented_style))
-            else:  # Sem indentação
-                # Campos a destacar em negrito (label parte antes dos dois-pontos será em <b>)
-                important_prefixes = [
-                    'Nome do computador',
-                    'Tipo',
-                    'Versão do sistema operacional',
-                    'Antivírus',
-                    'Memória RAM total',
-                    'Processador'
-                ]
 
-                # Se a linha contém um ':' vamos separar label/valor e aplicar negrito no label quando aplicável
+            if line.startswith("    "):
+                story.append(Paragraph(clean_text(line_stripped), double_indented_style))
+            elif line.startswith("  "):
+                story.append(Paragraph(clean_text(line_stripped), indented_style))
+            else:
+                important_prefixes = ['Nome do computador', 'Tipo', 'Versão do sistema operacional', 'Antivírus', 'Memória RAM total', 'Processador']
                 if ':' in line_stripped:
                     left, right = line_stripped.split(':', 1)
                     left_clean = clean_text(left).strip()
                     right_clean = clean_text(right).strip()
-                    # Verificar se o início (sem número) corresponde a algum prefixo importante
-                    left_check = re.sub(r"\s+\d+$", '', left_clean)  # remove sufixos numéricos como 'Antivírus 1'
+                    left_check = re.sub(r"\s+\d+$", '', left_clean)
                     if any(left_check.startswith(p) for p in important_prefixes):
-                        # verificar se há cor específica para este campo
                         color = None
                         try:
-                            # checar match exato primeiro, depois por prefixo sem número
                             color = pdf_field_colors.get(left_clean) or pdf_field_colors.get(left_check)
                         except Exception:
                             color = None
-
-                        # Campos que devem aparecer com fundo cinza 20%
                         try:
-                            special_bg_keys = {
-                                'Nome do computador',
-                                'Tipo',
-                                'Versão do sistema operacional',
-                                'Antivírus',
-                                'Memória RAM total',
-                                'Processador'
-                            }
+                            special_bg_keys = {'Nome do computador', 'Tipo', 'Versão do sistema operacional', 'Antivírus', 'Memória RAM total', 'Processador'}
                             if left_check in special_bg_keys or left_clean in special_bg_keys:
-                                # Novo formato solicitado: chave em fonte normal e valor em negrito, sem fundo cinza
-                                # aplicar cor apenas ao valor caso exista mapeamento
                                 if color:
                                     paragraph_text = f"{left_clean}: <font color=\"{color}\"><b>{right_clean}</b></font>"
                                 else:
@@ -2163,9 +2161,7 @@ def write_pdf_report(path, lines, computer_name):
                                 story.append(Paragraph(paragraph_text, normal_style))
                                 continue
                         except Exception:
-                            # se qualquer problema ocorrer, voltar ao comportamento padrão
                             pass
-
                         if color:
                             paragraph_text = f"<font color=\"{color}\"><b>{left_clean}:</b> {right_clean}</font>"
                         else:
@@ -2173,38 +2169,21 @@ def write_pdf_report(path, lines, computer_name):
                         story.append(Paragraph(paragraph_text, normal_style))
                         continue
                 else:
-                    # Linhas sem ':' como "Processador" exatas podem aparecer - destacar se começarem com o prefixo
                     for p in important_prefixes:
                         if line_stripped.startswith(p) and len(line_stripped) <= len(p) + 10:
-                            # destacar toda a linha
-                            # aplicar cor se definida
                             try:
                                 color = pdf_field_colors.get(line_stripped) or pdf_field_colors.get(re.sub(r"\s+\d+$", '', line_stripped))
                             except Exception:
                                 color = None
-                            # aplicar fundo cinza também para chaves especiais
                             try:
-                                special_bg_keys = {
-                                    'Nome do computador',
-                                    'Tipo',
-                                    'Versão do sistema operacional',
-                                    'Antivírus',
-                                    'Memória RAM total',
-                                    'Processador'
-                                }
+                                special_bg_keys = {'Nome do computador', 'Tipo', 'Versão do sistema operacional', 'Antivírus', 'Memória RAM total', 'Processador'}
                                 if re.sub(r"\s+\d+$", '', line_stripped) in special_bg_keys or line_stripped in special_bg_keys:
-                                    # Caso sem ':' — trataremos como chave isolada: renderizar chave em fonte normal (sem fundo)
-                                    try:
-                                        color = pdf_field_colors.get(line_stripped) or pdf_field_colors.get(re.sub(r"\s+\d+$", '', line_stripped))
-                                    except Exception:
-                                        color = None
                                     if color:
                                         story.append(Paragraph(f"<font color=\"{color}\">{clean_text(line_stripped)}</font>", normal_style))
                                     else:
                                         story.append(Paragraph(clean_text(line_stripped), normal_style))
                                     break
                             except Exception:
-                                # fallback para parágrafo simples
                                 if color:
                                     story.append(Paragraph(f"<font color=\"{color}\"><b>{clean_text(line_stripped)}</b></font>", normal_style))
                                 else:
@@ -2219,15 +2198,13 @@ def write_pdf_report(path, lines, computer_name):
                         story.append(Paragraph(clean_text(line_stripped), normal_style))
                     continue
 
-                # Default: se não entrou nos casos acima, renderizar como normal
                 story.append(Paragraph(clean_text(line_stripped), normal_style))
-        # Se houver log de sessão, anexar como apêndice no PDF
+
         try:
             sess = get_debug_session_log()
             if sess and os.path.exists(sess):
                 story.append(PageBreak())
                 story.append(Paragraph('<b>LOG DE DEBUG (CSINFO)</b>', section_title_styles.get('INFORMAÇÕES DO SISTEMA', header_style)))
-                # Ler em blocos para evitar problemas de memória
                 try:
                     with open(sess, 'r', encoding='utf-8', errors='replace') as lf:
                         for raw in lf:
@@ -2235,17 +2212,33 @@ def write_pdf_report(path, lines, computer_name):
                             if txt:
                                 story.append(Paragraph(txt, normal_style))
                 except Exception:
-                    # falhar silenciosamente no anexo do log
                     pass
         except Exception:
             pass
-        
-        # Gerar PDF com canvas personalizado
-        doc.build(story, canvasmaker=NumberedCanvas)
-        return True
-        
+
+        try:
+            doc.build(story, canvasmaker=NumberedCanvas)
+            # move temp file to final path atomically
+            try:
+                if os.path.exists(tmp_path):
+                    os.replace(tmp_path, path)
+            except Exception:
+                # best-effort; if rename fails, leave temp file for inspection
+                pass
+            return True
+        except Exception:
+            tb = traceback.format_exc()
+            try:
+                print("Erro ao gerar arquivo PDF:", tb, file=sys.stderr)
+            except Exception:
+                pass
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                pass
+            return False
     except Exception:
-        # Falhar silenciosamente aqui — a chamada chamadora deve lidar com o retorno False
         return False
 
 def check_remote_machine(computer_name):
@@ -2635,34 +2628,7 @@ def main(export_type=None, barra_callback=None, computer_name=None, include_debu
         lines.append("Impressora: NÃO OBTIDO")
     lines.append("")
     barra_progresso(21)
-
-    # ADMINISTRADORES (mantém como está)
-    lines.append("ADMINISTRADORES")
-    admin_users = get_admin_users(computer_name)
-    if admin_users:
-        for idx, user in enumerate(admin_users, start=1):
-            # Como agora get_admin_users retorna apenas strings (nomes)
-            name = padrao(user if isinstance(user, str) else user.get('Name', ''))
-            lines.append(f"Administrador {idx}: {name}")
-    else:
-        lines.append("Usuários Administradores: NÃO OBTIDO")
-    barra_progresso(22)
-
-    # SOFTWARES INSTALADOS (mantém como está)
-    lines.append("")  # Linha em branco para separar
-    lines.append("SOFTWARES INSTALADOS")
-    installed_software = get_installed_software(computer_name)
-    if installed_software:
-        for idx, software in enumerate(installed_software, start=1):
-            name = padrao(software.get('Name', ''))
-            version = padrao(software.get('Version', ''))
-            publisher = padrao(software.get('Publisher', ''))
-            lines.append(f"{idx}. {name} | Versão: {version} | Editor: {publisher}")
-    else:
-        lines.append("Nenhum software detectado")
-    barra_progresso(23)
-
-    # --- NOVAS SEÇÕES ---
+    # --- INFORMAÇÕES DE REDE (moveram para cá) ---
     lines.append("")
     lines.append("INFORMAÇÕES DE REDE")
     if network_details:
@@ -2699,50 +2665,61 @@ def main(export_type=None, barra_callback=None, computer_name=None, include_debu
         lines.append(f"  {windows_update_status}")
     else:
         lines.append("Windows Update: NÃO OBTIDO")
-    
-    # RODAPÉ
+
+    # RODAPÉ (mantido mais adiante)
     lines.append("")
     lines.append("")
     lines.append("CSInfo by CEOsoftware")
 
+    # ADMINISTRADORES (mantém como está)
+    lines.append("ADMINISTRADORES")
+    admin_users = get_admin_users(computer_name)
+    if admin_users:
+        for idx, user in enumerate(admin_users, start=1):
+            # Como agora get_admin_users retorna apenas strings (nomes)
+            name = padrao(user if isinstance(user, str) else user.get('Name', ''))
+            lines.append(f"Administrador {idx}: {name}")
+    else:
+        lines.append("Usuários Administradores: NÃO OBTIDO")
+    barra_progresso(22)
+
+    # SOFTWARES INSTALADOS (mantém como está)
+    lines.append("")  # Linha em branco para separar
+    lines.append("SOFTWARES INSTALADOS")
+    installed_software = get_installed_software(computer_name)
+    if installed_software:
+        for idx, software in enumerate(installed_software, start=1):
+            name = padrao(software.get('Name', ''))
+            version = padrao(software.get('Version', ''))
+            publisher = padrao(software.get('Publisher', ''))
+            lines.append(f"{idx}. {name} | Versão: {version} | Editor: {publisher}")
+    else:
+        lines.append("Nenhum software detectado")
+    barra_progresso(23)
+
     # Só gera TXT/PDF se export_type for passado explicitamente e for um dos valores esperados
-    pdf_path = None
+    pdf_path = path.replace('.txt', '.pdf')
     print(f"DEBUG csinfo: export_type={repr(export_type)}, gerar_txt={gerar_txt}, gerar_pdf={gerar_pdf}")
     if export_type in ('txt', 'pdf', 'ambos'):
         if export_type in ('txt', 'ambos'):
             try:
+                print(f"DEBUG csinfo: Gravando TXT em: {path}")
                 write_report(path, lines, include_debug=include_debug_on_export)
+                barra_progresso(23)
                 print(f"Arquivo TXT gerado: {path}")
             except Exception as e:
                 print('Erro ao gerar TXT:', e)
         if export_type in ('pdf', 'ambos'):
             try:
+                print("Gerando arquivo PDF...")
                 ok = write_pdf_report(pdf_path, lines, machine)
                 if ok:
-                    print(f"Arquivo PDF gerado: {pdf_path}")
-            except Exception as e:
-                print('Erro ao gerar PDF:', e)
-        # Escrita explícita conforme seleção
-        if export_type in ('txt', 'ambos'):
-            try:
-                print(f"DEBUG csinfo: Gravando TXT em: {path}")
-                write_report(path, lines)
-                barra_progresso(23)
-                print(f"\u2705 Arquivo TXT gerado: {path}")
-            except Exception as e:
-                print(f"\u274c Erro ao escrever TXT: {e}")
-        if export_type in ('pdf', 'ambos'):
-            pdf_path = path.replace('.txt', '.pdf')
-            print("Gerando arquivo PDF...")
-            try:
-                ok = write_pdf_report(pdf_path, lines, machine)
-                if ok:
-                    print(f"\u2705 Arquivo PDF gerado com sucesso: {pdf_path}")
+                    print(f"Arquivo PDF gerado com sucesso: {pdf_path}")
                 else:
-                    print("\u274c Erro ao gerar arquivo PDF.")
+                    print("Erro ao gerar arquivo PDF.")
                     pdf_path = None
             except Exception as e:
-                print(f"\u274c Exceção ao gerar PDF: {e}")
+                print('Exceção ao gerar PDF:', e)
 
     # Perguntar se deseja abrir os arquivos gerados
     if not modo_gui:

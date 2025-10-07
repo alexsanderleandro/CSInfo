@@ -133,7 +133,11 @@ class CSInfoGUI(tk.Tk):
         self.after(100, self._process_queue)
 
     def _get_machine_json_path(self):
-        base = os.path.join(get_appdata_path(), 'CSInfo')
+        # Alterado: usar pasta fixa em C:\CEOSOFTWARE quando rodando no Windows
+        if sys.platform.startswith('win'):
+            base = r'C:\CEOSOFTWARE'
+        else:
+            base = os.path.join(get_appdata_path(), 'CSInfo')
         try:
             os.makedirs(base, exist_ok=True)
         except Exception:
@@ -230,8 +234,7 @@ class CSInfoGUI(tk.Tk):
         except Exception:
             pass
 
-        self.btn_open_folder = ttk.Button(left, text='Abrir pasta de máquinas', command=self.open_machine_json_folder)
-        self.btn_open_folder.pack(fill='x', pady=(8, 0))
+    # botão 'Abrir pasta de máquinas' removido conforme solicitado
 
         # Botão para atualizar status das máquinas (F5)
         self.btn_refresh = ttk.Button(left, text='Atualizar (F5)', command=self.refresh_machine_status)
@@ -402,17 +405,7 @@ Atalhos: F3 (Coletar), F5 (Atualizar), F10 (Exportar).
             col = meta.get('sort_column')
             rev = bool(meta.get('sort_reverse'))
             if col:
-                self._sort_column = col
-                self._sort_reverse = rev
-                try:
-                    # ordenar com a mesma lógica que _sort_by_column
-                    self._sort_by_column(col)
-                except Exception:
-                    pass
-                try:
-                    self._refresh_sort_indicators()
-                except Exception:
-                    pass
+                self._apply_sort(col, rev)
         except Exception:
             pass
         # iniciar verificação de ping assim que a lista for carregada
@@ -485,6 +478,30 @@ Atalhos: F3 (Coletar), F5 (Atualizar), F10 (Exportar).
                 pass
             try:
                 self._flash_sort_indicator(self._sort_column)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _apply_sort(self, col, reverse=False):
+        """Aplica uma ordenação já determinada (usada ao carregar do disco) sem alternar o sentido."""
+        try:
+            # determinar chave de ordenação (mesma lógica de _sort_by_column)
+            if col == 'name':
+                keyfunc = lambda m: (m.get('name') or '').strip().upper()
+            elif col == 'alias':
+                keyfunc = lambda m: (m.get('alias') or '').strip().upper()
+            elif col == 'status':
+                keyfunc = lambda m: (0 if bool(m.get('online')) else 1, (m.get('name') or '').strip().upper())
+            else:
+                keyfunc = lambda m: (m.get(col) or '')
+
+            self._sort_column = col
+            self._sort_reverse = bool(reverse)
+            self.machine_list.sort(key=keyfunc, reverse=self._sort_reverse)
+            self.populate_machine_tree()
+            try:
+                self._refresh_sort_indicators()
             except Exception:
                 pass
         except Exception:
@@ -924,15 +941,25 @@ Atalhos: F3 (Coletar), F5 (Atualizar), F10 (Exportar).
                 try:
                     if csinfo:
                         # Não pedir export automático ao backend aqui; o usuário deve clicar em Exportar
-                        csinfo.main(barra_callback=barra_callback,
-                                    computer_name=computer,
-                                    machine_alias=alias)
+                        try:
+                            csinfo.main(barra_callback=barra_callback,
+                                        computer_name=computer,
+                                        machine_alias=alias)
+                        except Exception as e:
+                            import traceback as _tb
+                            tb = _tb.format_exc()
+                            try:
+                                # enviar o traceback para a UI
+                                self.queue.put(('line', f"Erro durante coleta: {str(e)}"))
+                                for ln in tb.splitlines():
+                                    self.queue.put(('line', ln))
+                            except Exception:
+                                pass
                     else:
-                        for i in range(0, 101, 10):
-                            barra_callback(i, f"Simulando etapa {i}")
-                            threading.Event().wait(0.05)
-                        barra_callback(None, 'Linha simulada 1')
-                        barra_callback(None, 'Linha simulada 2')
+                        try:
+                            self.queue.put(('line', 'Backend csinfo não disponível. Verifique a instalação do módulo csinfo.'))
+                        except Exception:
+                            pass
                     self.queue.put(('done', None))
                 finally:
                     if csinfo:
