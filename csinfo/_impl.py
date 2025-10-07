@@ -1873,6 +1873,20 @@ def write_pdf_report(path, lines, computer_name):
         # coletor de seções para o índice
         toc_sections = []
 
+        def add_toc_section(title, dest):
+            """Adiciona uma entrada ao toc_sections garantindo unicidade por destino."""
+            try:
+                for t, d in toc_sections:
+                    if d == dest:
+                        return
+                toc_sections.append((title, dest))
+            except Exception:
+                try:
+                    if (title, dest) not in toc_sections:
+                        toc_sections.append((title, dest))
+                except Exception:
+                    pass
+
         class SectionAnchor(Flowable):
             def __init__(self, name, title):
                 super().__init__()
@@ -1892,6 +1906,28 @@ def write_pdf_report(path, lines, computer_name):
         def draw_header(canvas_obj, doc_obj):
             canvas_obj.saveState()
             y_title = A4[1] - 0.7 * inch if doc_obj.page == 1 else A4[1] - 0.6 * inch
+            # desenhar logotipo pequeno à esquerda, se disponível
+            try:
+                import os
+                from reportlab.lib.utils import ImageReader
+                logo_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'ico.png')
+                logo_path = os.path.abspath(logo_path)
+                if os.path.exists(logo_path):
+                    try:
+                        img = ImageReader(logo_path)
+                        iw, ih = img.getSize()
+                        desired_w = 0.38 * inch
+                        scale = desired_w / float(iw) if iw else 1.0
+                        desired_h = float(ih) * scale
+                        x_img = 0.6 * inch
+                        # subir levemente o logo para ficar alinhado com o título
+                        logo_offset_up = 0.08 * inch
+                        y_img = y_title - (desired_h / 2.0) + logo_offset_up
+                        canvas_obj.drawImage(img, x_img, y_img, width=desired_w, height=desired_h, preserveAspectRatio=True, mask='auto')
+                    except Exception:
+                        pass
+            except Exception:
+                pass
             canvas_obj.setFillColor(colors.navy)
             canvas_obj.setFont("Helvetica-Bold", 11)
             canvas_obj.drawCentredString(A4[0] / 2, y_title, "CSInfo - Inventário de hardware e software")
@@ -1913,42 +1949,14 @@ def write_pdf_report(path, lines, computer_name):
             canvas_obj.restoreState()
 
         def draw_sidebar(canvas_obj, doc_obj):
-            try:
-                x0 = 0.5 * inch
-                x1 = x0 + sidebar_width - 6
-                y = A4[1] - (0.9 * inch)
-                canvas_obj.saveState()
-                try:
-                    canvas_obj.setFillColor(colors.Color(0.98, 0.98, 0.98))
-                    canvas_obj.rect(x0 - 4, 0.6 * inch, sidebar_width + 2, A4[1] - 1.6 * inch, fill=1, stroke=0)
-                except Exception:
-                    pass
-                canvas_obj.setFont('Helvetica-Bold', 9)
-                canvas_obj.setFillColor(colors.Color(0.2, 0.2, 0.2))
-                canvas_obj.drawString(x0, y, 'Índice')
-                y -= 12
-                canvas_obj.setFont('Helvetica', 8)
-                for title, dest in toc_sections:
-                    if y < 1.2 * inch:
-                        break
-                    text = title if len(title) <= 24 else title[:21] + '...'
-                    canvas_obj.setFillColor(colors.blue)
-                    canvas_obj.drawString(x0, y, text)
-                    try:
-                        # Use linkAbsolute to create an internal link to the named destination
-                        # signature: linkAbsolute(name, destinationname, Rect=(x1,y1,x2,y2))
-                        canvas_obj.linkAbsolute('', dest, Rect=(x0, y - 2, x1, y + 10))
-                    except Exception:
-                        pass
-                    y -= 11
-                canvas_obj.restoreState()
-            except Exception:
-                pass
+            # Intencionalmente vazio — sidebar removida por solicitação do usuário.
+            # Mantemos a função para compatibilidade, mas não desenhamos nada.
+            return
 
         def draw_page(canvas_obj, doc_obj):
+            # Cabeçalho com título e logo
             draw_header(canvas_obj, doc_obj)
-            # Não desenhar o índice visível nas páginas (evita repetição no corpo)
-            # draw_sidebar(canvas_obj, doc_obj)
+            # A sidebar/índice foi removida por solicitação — não desenhar
 
         template = PageTemplate(id='normal', frames=[frame], onPage=draw_page)
         doc.addPageTemplates([template])
@@ -1958,12 +1966,12 @@ def write_pdf_report(path, lines, computer_name):
         header_style = ParagraphStyle('CSInfoHeader', parent=styles['Normal'], fontSize=10, textColor=colors.navy, alignment=TA_LEFT, spaceAfter=6, leading=13, fontName='Helvetica-Bold')
         # Use cor neutra para títulos das seções no corpo (preto). O índice lateral manterá a cor azul.
         section_title_styles = {
-            "INFORMAÇÕES DO SISTEMA": ParagraphStyle('SectionTitleSistema', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.black, fontName='Helvetica-Bold', alignment=TA_LEFT),
-            "INFORMAÇÕES DE HARDWARE": ParagraphStyle('SectionTitleHardware', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.black, fontName='Helvetica-Bold', alignment=TA_LEFT),
-            "ADMINISTRADORES": ParagraphStyle('SectionTitleAdmin', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.black, fontName='Helvetica-Bold', alignment=TA_LEFT),
-            "SOFTWARES INSTALADOS": ParagraphStyle('SectionTitleSoft', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.black, fontName='Helvetica-Bold', alignment=TA_LEFT),
-            "INFORMAÇÕES DE REDE": ParagraphStyle('SectionTitleNet', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.black, fontName='Helvetica-Bold', alignment=TA_LEFT),
-            "SEGURANÇA DO SISTEMA": ParagraphStyle('SectionTitleSec', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.black, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "INFORMAÇÕES DO SISTEMA": ParagraphStyle('SectionTitleSistema', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "INFORMAÇÕES DE HARDWARE": ParagraphStyle('SectionTitleHardware', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "ADMINISTRADORES": ParagraphStyle('SectionTitleAdmin', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "SOFTWARES INSTALADOS": ParagraphStyle('SectionTitleSoft', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "INFORMAÇÕES DE REDE": ParagraphStyle('SectionTitleNet', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "SEGURANÇA DO SISTEMA": ParagraphStyle('SectionTitleSec', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
         }
         normal_style = ParagraphStyle('CustomNormal', parent=styles['Normal'], fontSize=9, spaceAfter=2, leading=11, textColor=colors.black, fontName='Helvetica')
         indented_style = ParagraphStyle('IndentedNormal', parent=styles['Normal'], fontSize=9, spaceAfter=2, leading=11, textColor=colors.black, fontName='Helvetica', leftIndent=12)
@@ -2016,7 +2024,7 @@ def write_pdf_report(path, lines, computer_name):
 
             id_title_style = ParagraphStyle('IdTitle', parent=styles['Normal'], fontSize=10, leading=12, alignment=TA_LEFT, fontName='Helvetica-Bold', textColor=colors.white)
             id_dest = 'sec_IDENTIFICACAO'
-            toc_sections.append(('IDENTIFICAÇÃO', id_dest))
+            add_toc_section('IDENTIFICAÇÃO', id_dest)
             story.append(SectionAnchor(id_dest, 'IDENTIFICAÇÃO'))
             title_para = Paragraph('<b>IDENTIFICAÇÃO</b>', id_title_style)
             table_width = A4[0] - inch
@@ -2115,7 +2123,7 @@ def write_pdf_report(path, lines, computer_name):
                 # Adiciona âncora para navegação
                 story.append(SectionAnchor(destname, line_stripped))
                 try:
-                    toc_sections.append((line_stripped, destname))
+                    add_toc_section(line_stripped, destname)
                 except Exception:
                     pass
                 try:
