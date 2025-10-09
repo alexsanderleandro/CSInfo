@@ -2333,16 +2333,39 @@ def write_pdf_report(path, lines, computer_name):
         story = []
         annotations_to_create = []
         styles = getSampleStyleSheet()
-        header_style = ParagraphStyle('CSInfoHeader', parent=styles['Normal'], fontSize=10, textColor=colors.navy, alignment=TA_LEFT, spaceAfter=6, leading=13, fontName='Helvetica-Bold')
-        # Use cor neutra para títulos das seções no corpo (preto). O índice lateral manterá a cor azul.
+        # header para o topo e títulos das seções
+        header_style = ParagraphStyle('CSInfoHeader', parent=styles['Normal'], fontSize=10, textColor=colors.navy, alignment=TA_LEFT, spaceAfter=6, leading=14, fontName='Helvetica-Bold')
+        # padronizar espaçamento/leading e usar cores suaves de fundo por seção
+        TITLE_LEADING = 14
+        TITLE_SPACE_BEFORE = 1
+        TITLE_SPACE_AFTER = 1
         section_title_styles = {
-            "INFORMAÇÕES DO SISTEMA": ParagraphStyle('SectionTitleSistema', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
-            "INFORMAÇÕES DE HARDWARE": ParagraphStyle('SectionTitleHardware', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
-            "ADMINISTRADORES": ParagraphStyle('SectionTitleAdmin', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
-            "SOFTWARES INSTALADOS": ParagraphStyle('SectionTitleSoft', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
-            "INFORMAÇÕES DE REDE": ParagraphStyle('SectionTitleNet', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
-            "SEGURANÇA DO SISTEMA": ParagraphStyle('SectionTitleSec', parent=styles['Heading2'], fontSize=10, spaceAfter=6, spaceBefore=6, leading=12, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "INFORMAÇÕES DO SISTEMA": ParagraphStyle('SectionTitleSistema', parent=styles['Heading2'], fontSize=10, spaceAfter=TITLE_SPACE_AFTER, spaceBefore=TITLE_SPACE_BEFORE, leading=TITLE_LEADING, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "INFORMAÇÕES DE HARDWARE": ParagraphStyle('SectionTitleHardware', parent=styles['Heading2'], fontSize=10, spaceAfter=TITLE_SPACE_AFTER, spaceBefore=TITLE_SPACE_BEFORE, leading=TITLE_LEADING, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "ADMINISTRADORES": ParagraphStyle('SectionTitleAdmin', parent=styles['Heading2'], fontSize=10, spaceAfter=TITLE_SPACE_AFTER, spaceBefore=TITLE_SPACE_BEFORE, leading=TITLE_LEADING, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "SOFTWARES INSTALADOS": ParagraphStyle('SectionTitleSoft', parent=styles['Heading2'], fontSize=10, spaceAfter=TITLE_SPACE_AFTER, spaceBefore=TITLE_SPACE_BEFORE, leading=TITLE_LEADING, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "INFORMAÇÕES DE REDE": ParagraphStyle('SectionTitleNet', parent=styles['Heading2'], fontSize=10, spaceAfter=TITLE_SPACE_AFTER, spaceBefore=TITLE_SPACE_BEFORE, leading=TITLE_LEADING, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
+            "SEGURANÇA DO SISTEMA": ParagraphStyle('SectionTitleSec', parent=styles['Heading2'], fontSize=10, spaceAfter=TITLE_SPACE_AFTER, spaceBefore=TITLE_SPACE_BEFORE, leading=TITLE_LEADING, textColor=colors.whitesmoke, fontName='Helvetica-Bold', alignment=TA_LEFT),
         }
+        # cores mais saturadas/escurecidas para contraste com texto branco
+        section_bg_colors = {
+            "IDENTIFICAÇÃO": colors.Color(0.20, 0.30, 0.40),  
+            "INFORMAÇÕES DO SISTEMA": colors.Color(0.10, 0.45, 0.70),  
+            "INFORMAÇÕES DE HARDWARE": colors.Color(0.10, 0.60, 0.25),  
+            "INFORMAÇÕES DE REDE": colors.Color(0.05, 0.55, 0.55),              
+            "SEGURANÇA DO SISTEMA": colors.Color(0.15, 0.25, 0.25),  
+            "ADMINISTRADORES": colors.Color(0.70, 0.45, 0.10),  
+            "SOFTWARES INSTALADOS": colors.Color(0.50, 0.20, 0.10),  
+        }
+        # padronizar paddings das células de título
+        TITLE_LEFTPAD = 6
+        TITLE_RIGHTPAD = 6
+        TITLE_TOPPAD = 8
+        TITLE_BOTTOMPAD = 8
+        # gap vertical padrão entre blocos de título
+        TITLE_GAP = 8
+        # Small gap specifically used after certain titles to tighten spacing
+        SMALL_TITLE_GAP = 4
         normal_style = ParagraphStyle('CustomNormal', parent=styles['Normal'], fontSize=9, spaceAfter=2, leading=11, textColor=colors.black, fontName='Helvetica')
         indented_style = ParagraphStyle('IndentedNormal', parent=styles['Normal'], fontSize=9, spaceAfter=2, leading=11, textColor=colors.black, fontName='Helvetica', leftIndent=12)
         double_indented_style = ParagraphStyle('DoubleIndentedNormal', parent=styles['Normal'], fontSize=9, spaceAfter=2, leading=11, textColor=colors.black, fontName='Helvetica', leftIndent=24)
@@ -2400,9 +2423,19 @@ def write_pdf_report(path, lines, computer_name):
             title_para = criar_titulo_pdf('IDENTIFICAÇÃO', styles=styles)
             table_width = A4[0] - inch
             tbl = Table([[title_para]], colWidths=[table_width])
-            tbl.setStyle(TableStyle([('BACKGROUND', (0, 0), (0, 0), colors.Color(0.5, 0.5, 0.5)), ('LEFTPADDING', (0, 0), (0, 0), 6), ('RIGHTPADDING', (0, 0), (0, 0), 6), ('TOPPADDING', (0, 0), (0, 0), 6), ('BOTTOMPADDING', (0, 0), (0, 0), 6),]))
+            try:
+                bg = section_bg_colors.get('IDENTIFICAÇÃO', colors.Color(0.8, 0.8, 0.8))
+            except Exception:
+                bg = colors.Color(0.8, 0.8, 0.8)
+            tbl.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, 0), bg),
+                ('LEFTPADDING', (0, 0), (0, 0), TITLE_LEFTPAD),
+                ('RIGHTPADDING', (0, 0), (0, 0), TITLE_RIGHTPAD),
+                ('TOPPADDING', (0, 0), (0, 0), TITLE_TOPPAD),
+                ('BOTTOMPADDING', (0, 0), (0, 0), TITLE_BOTTOMPAD),
+            ]))
             story.append(tbl)
-            story.append(Spacer(1, 4))
+            story.append(Spacer(1, TITLE_GAP))
             for k in ('Nome do computador', 'Tipo', 'Gerado por', 'Relatório gerado em'):
                 v = id_keys.get(k)
                 if v is None:
@@ -2517,11 +2550,31 @@ def write_pdf_report(path, lines, computer_name):
                     title_para = LinkedParagraph(link_text, section_title_styles.get(line_stripped, header_style), destname=detail_dest)
                     table_width = A4[0] - inch
                     tbl = Table([[title_para]], colWidths=[table_width])
-                    tbl.setStyle(TableStyle([('BACKGROUND', (0, 0), (0, 0), colors.Color(0.5, 0.5, 0.5)), ('LEFTPADDING', (0, 0), (0, 0), 6), ('RIGHTPADDING', (0, 0), (0, 0), 6), ('TOPPADDING', (0, 0), (0, 0), 6), ('BOTTOMPADDING', (0, 0), (0, 0), 6),]))
+                    try:
+                        bg = section_bg_colors.get(line_stripped, colors.Color(0.5, 0.5, 0.5))
+                    except Exception:
+                        bg = colors.Color(0.5, 0.5, 0.5)
+                    tbl.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (0, 0), bg),
+                        ('LEFTPADDING', (0, 0), (0, 0), TITLE_LEFTPAD),
+                        ('RIGHTPADDING', (0, 0), (0, 0), TITLE_RIGHTPAD),
+                        ('TOPPADDING', (0, 0), (0, 0), TITLE_TOPPAD),
+                        ('BOTTOMPADDING', (0, 0), (0, 0), TITLE_BOTTOMPAD),
+                    ]))
                     story.append(tbl)
+                    try:
+                        gap = SMALL_TITLE_GAP if str(line_stripped).strip().upper() == 'INFORMAÇÕES DO SISTEMA' else TITLE_GAP
+                    except Exception:
+                        gap = TITLE_GAP
+                    story.append(Spacer(1, gap))
                 except Exception:
                     try:
                         story.append(Paragraph(clean_text(line_stripped), section_title_styles.get(line_stripped, header_style)))
+                        try:
+                            gap = SMALL_TITLE_GAP if str(line_stripped).strip().upper() == 'INFORMAÇÕES DO SISTEMA' else TITLE_GAP
+                            story.append(Spacer(1, gap))
+                        except Exception:
+                            pass
                     except Exception:
                         pass
                 # iniciar coleta de linhas do grupo (não inserir conteúdo no corpo)
@@ -2730,16 +2783,46 @@ def write_pdf_report(path, lines, computer_name):
                                 story.append(SectionAnchor(detail_dest, f"Detalhes: {title_text}"))
                             except Exception:
                                 pass
-                            # título de detalhe com link de volta
+                            # título de detalhe com link de volta (bloco colorido)
                             try:
-                                # usar LinkedParagraph para o link de voltar
-                                story.append(LinkedParagraph(f"<b>Detalhes: {clean_text(title_text)}</b> [voltar]", header_style, destname=sec_dest))
+                                # construir paragraph com texto branco
+                                detail_text = f"Detalhes: {clean_text(title_text)} [voltar]"
+                                # criar um estilo de detalhe baseado em header_style com texto branco
+                                try:
+                                    detail_style = ParagraphStyle(f"Detail_{title_text}", parent=header_style, textColor=colors.whitesmoke, leading=TITLE_LEADING)
+                                except Exception:
+                                    detail_style = ParagraphStyle('DetailFallback', parent=header_style, textColor=colors.whitesmoke)
+                                # Use LinkedParagraph so the '[voltar]' clickable area is recorded
+                                # and later turned into a GoTo annotation in post-processing.
+                                title_para = LinkedParagraph(f"<b>{detail_text}</b>", detail_style, destname=sec_dest)
+                                # selecionar a cor de fundo correspondente ao título principal (sem 'Detalhes: ' prefix)
+                                base_title = title_text
+                                try:
+                                    bg = section_bg_colors.get(base_title, colors.Color(0.2, 0.2, 0.2))
+                                except Exception:
+                                    bg = colors.Color(0.2, 0.2, 0.2)
+                                # criar tabela para fundo colorido e paddings uniformes
+                                tblw = Table([[title_para]], colWidths=[A4[0] - inch])
+                                tblw.setStyle(TableStyle([
+                                    ('BACKGROUND', (0, 0), (0, 0), bg),
+                                    ('LEFTPADDING', (0, 0), (0, 0), TITLE_LEFTPAD),
+                                    ('RIGHTPADDING', (0, 0), (0, 0), TITLE_RIGHTPAD),
+                                    ('TOPPADDING', (0, 0), (0, 0), TITLE_TOPPAD),
+                                    ('BOTTOMPADDING', (0, 0), (0, 0), TITLE_BOTTOMPAD),
+                                ]))
+                                story.append(tblw)
+                                # controlar gap (usar SMALL_TITLE_GAP se aplicável)
+                                try:
+                                    gap = SMALL_TITLE_GAP if str(base_title).strip().upper() == 'INFORMAÇÕES DO SISTEMA' else TITLE_GAP
+                                except Exception:
+                                    gap = TITLE_GAP
+                                story.append(Spacer(1, gap))
                             except Exception:
                                 try:
                                     story.append(Paragraph(f"Detalhes: {clean_text(title_text)}", header_style))
+                                    story.append(Spacer(1, TITLE_GAP))
                                 except Exception:
                                     pass
-                            story.append(Spacer(1, 6))
                             # conteúdo do grupo
                             for raw in lines:
                                 try:
@@ -3173,6 +3256,11 @@ def main(export_type=None, barra_callback=None, computer_name=None, include_debu
         return valor if valor and str(valor).strip() else "NÃO OBTIDO"
     
     # LINHAS INICIAIS SOLICITADAS: Nome, Tipo, Gerado por
+    # Inserir título textual para exportações em TXT quando o PDF não for gerado
+    try:
+        add_line("IDENTIFICAÇÃO")
+    except Exception:
+        pass
     add_line(f"Nome do computador: {machine}")
     # Determinar tipo com base no ChassisTypes quando possível
     tipo_chassi = get_chassis_type_name(computer_name)
