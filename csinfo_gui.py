@@ -1364,6 +1364,53 @@ Atalhos: F3 (Coletar), F5 (Atualizar), F10 (Exportar).
                         with open(p, 'w', encoding='utf-8') as fh:
                             fh.write('\n'.join(self.last_lines))
                     self._append_output(f'Exportado PDF: {p}')
+                    # remover sidecars gerados pelo backend (ex.: *.pdf.tmp.annots.jsonl)
+                    try:
+                        import time, tempfile
+                        try:
+                            base_name = base
+                        except Exception:
+                            base_name = os.path.splitext(os.path.basename(p))[0]
+                        # limpar no diretório de exportação local
+                        try:
+                            for fn in os.listdir(pdf_folder):
+                                if not fn.endswith('.annots.jsonl'):
+                                    continue
+                                # só remover arquivos relacionados ao export atual
+                                if base_name not in fn:
+                                    continue
+                                full = os.path.join(pdf_folder, fn)
+                                for _attempt in range(3):
+                                    try:
+                                        if os.path.exists(full):
+                                            os.remove(full)
+                                        break
+                                    except Exception:
+                                        time.sleep(0.12)
+                                        continue
+                        except Exception:
+                            pass
+                        # também tentar limpar possíveis sidecars deixados em pasta temporária do sistema
+                        try:
+                            tmpd = tempfile.gettempdir()
+                            for fn in os.listdir(tmpd):
+                                if not fn.endswith('.annots.jsonl'):
+                                    continue
+                                if base_name not in fn:
+                                    continue
+                                full = os.path.join(tmpd, fn)
+                                for _attempt in range(3):
+                                    try:
+                                        if os.path.exists(full):
+                                            os.remove(full)
+                                        break
+                                    except Exception:
+                                        time.sleep(0.12)
+                                        continue
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
                 except Exception as e:
                     messagebox.showerror('Exportar', f'Erro ao escrever PDF: {e}')
                     return

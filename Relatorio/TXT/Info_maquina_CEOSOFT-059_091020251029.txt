@@ -5,7 +5,7 @@ Nome do computador: CEOSOFT-059
 Tipo: Desktop
 Gerado por: alex
 
-Relatório gerado em: 07/10/2025 - 13:16
+Relatório gerado em: 09/10/2025 - 10:29
 
 INFORMAÇÕES DO SISTEMA
 Versão do sistema operacional: Microsoft Windows 11 Pro (Version 10.0.26100) - 64 bits
@@ -35,7 +35,7 @@ Disco 1: ST1000DM010-2EP102 | Tamanho: 931.51 GB
   Tipo: HDD | Interface: IDE
 Disco 2: KINGSTON SA400S37960G | Tamanho: 894.25 GB
   Tipo: HDD | Interface: IDE
-Unidade C: (Sem rótulo) | Total: 893.51 GB | Usado: 555.71 GB | Livre: 337.80 GB | Sistema: NTFS
+Unidade C: (Sem rótulo) | Total: 893.51 GB | Usado: 550.50 GB | Livre: 343.01 GB | Sistema: NTFS
 Unidade D: (Sem rótulo) | Total: 465.37 GB | Usado: 318.79 GB | Livre: 146.58 GB | Sistema: NTFS
 Unidade E: (Partição 2) | Total: 435.29 GB | Usado: 135.91 GB | Livre: 299.38 GB | Sistema: NTFS
 Unidade F: (Swapping) | Total: 29.30 GB | Usado: 1.76 GB | Livre: 27.54 GB | Sistema: NTFS
@@ -57,9 +57,7 @@ Adaptador 1: Realtek PCIe GBE Family Controller
   IP: 192.168.0.159 | Gateway: 192.168.0.1 | DNS: 192.168.0.3, 192.168.0.4 | MAC: 2C:FD:A1:C8:77:61
 SEGURANÇA DO SISTEMA
 Firewall:
-  Perfil: Domain | Status: Desativado
-  Perfil: Private | Status: Desativado
-  Perfil: Public | Status: Desativado
+  Status: NÃO OBTIDO
 Windows Update:
   3 atualizações pendentes
 CSInfo by CEOsoftware
@@ -89,7 +87,7 @@ SOFTWARES INSTALADOS
 15. Flashback Express 7 | Versão: 7.7.0.445 | Editor: Blueberry Software
 16. GatewayComponents | Versão: 16.22.5 | Editor: Microsoft Corporation
 17. Git | Versão: 2.51.0.2 | Editor: The Git Development Community
-18. Google Chrome | Versão: 141.0.7390.54 | Editor: Google LLC
+18. Google Chrome | Versão: 141.0.7390.56 | Editor: Google LLC
 19. Gravador VSS da Microsoft para SQL Server 2022 | Versão: 16.0.1000.6 | Editor: Microsoft Corporation
 20. HP LaserJet 1020 Series | Versão: N/A | Editor: N/A
 21. Instalação do Microsoft SQL Server 2014 (em inglês) | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
@@ -100,7 +98,7 @@ SOFTWARES INSTALADOS
 26. Microsoft .NET Runtime - 8.0.20 (x64) | Versão: 64.80.39230 | Editor: Microsoft Corporation
 27. Microsoft Application Error Reporting | Versão: 12.0.6012.5000 | Editor: Microsoft Corporation
 28. Microsoft Edge | Versão: 141.0.3537.57 | Editor: Microsoft Corporation
-29. Microsoft Edge WebView2 Runtime | Versão: 140.0.3485.94 | Editor: Microsoft Corporation
+29. Microsoft Edge WebView2 Runtime | Versão: 141.0.3537.57 | Editor: Microsoft Corporation
 30. Microsoft Fabric Integration Runtime | Versão: 5.55.9295.2 | Editor: Microsoft Corporation
 31. Microsoft Help Viewer 1.1 | Versão: 1.1.40219 | Editor: Microsoft Corporation
 32. Microsoft Help Viewer 1.1 Language Pack - PTB | Versão: 1.1.40219 | Editor: Microsoft Corporation

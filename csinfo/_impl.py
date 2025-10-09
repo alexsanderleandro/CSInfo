@@ -80,8 +80,71 @@ def get_firewall_status(computer_name=None):
         $profiles = Get-NetFirewallProfile
         $out = @()
         foreach ($p in $profiles) {
-            $out += [PSCustomObject]@{
-                Perfil = $p.Name; Ativado = $p.Enabled
+                if os.path.exists(tmp_path):
+                    os.replace(tmp_path, path)
+                # limpar sidecar se ainda existir (não deixamos arquivos temporários após sucesso)
+                try:
+                    # tentar várias localizações possíveis do sidecar, pois o path
+                    # de saída pode ser absoluto/externo ao workspace
+                    candidates = []
+                    try:
+                        candidates.append(annots_sidecar)
+                    except Exception:
+                        pass
+                    try:
+                        candidates.append(path + '.tmp.annots.jsonl')
+                    except Exception:
+                        pass
+                    try:
+                        candidates.append(path + '.annots.jsonl')
+                    except Exception:
+                        pass
+                    try:
+                        candidates.append(tmp_path + '.annots.jsonl')
+                    except Exception:
+                        pass
+                    # deduplicate
+                    seen = set()
+                    for c in candidates:
+                        if not c:
+                            continue
+                        if c in seen:
+                            continue
+                        seen.add(c)
+                        try:
+                            if os.path.exists(c):
+                                os.remove(c)
+                        except Exception:
+                            # não falhar a exportação por conta do cleanup
+                            pass
+                except Exception:
+                    pass
+                # também limpar qualquer sidecar no diretório de exportação (padrão do usuário)
+                try:
+                    export_dir = os.path.dirname(os.path.abspath(path)) or os.getcwd()
+                    base = os.path.splitext(os.path.basename(path))[0]
+                    # padrão: arquivos que contenham o base do nome e terminem com .annots.jsonl
+                    candidates = []
+                    try:
+                        for fn in os.listdir(export_dir):
+                            if fn.endswith('.annots.jsonl') and base in fn:
+                                candidates.append(os.path.join(export_dir, fn))
+                    except Exception:
+                        candidates = []
+
+                    # tentar remover com algumas tentativas (em caso de locks temporários)
+                    import time
+                    for full in candidates:
+                        for attempt in range(3):
+                            try:
+                                if os.path.exists(full):
+                                    os.remove(full)
+                                break
+                            except Exception:
+                                time.sleep(0.12)
+                                continue
+                except Exception:
+                    pass
             }
         }
         $out | ConvertTo-Json -Compress
@@ -421,9 +484,16 @@ def run_powershell(cmd, computer_name=None, timeout=20, retries=2, initial_backo
 
             if os.name == 'nt':
                 creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
-                out = subprocess.check_output(full, stderr=subprocess.STDOUT, text=True, encoding='utf-8', timeout=timeout, creationflags=creationflags)
+                raw = subprocess.check_output(full, stderr=subprocess.STDOUT, text=False, timeout=timeout, creationflags=creationflags)
             else:
-                out = subprocess.check_output(full, stderr=subprocess.STDOUT, text=True, encoding='utf-8', timeout=timeout)
+                raw = subprocess.check_output(full, stderr=subprocess.STDOUT, text=False, timeout=timeout)
+            try:
+                out = raw.decode('utf-8', errors='replace')
+            except Exception:
+                try:
+                    out = str(raw)
+                except Exception:
+                    out = ''
             duration = time.time() - ts
             # debug
             if debug_enabled:
@@ -1959,7 +2029,22 @@ def write_pdf_report(path, lines, computer_name):
 
         # document and layout
         tmp_path = path + ".tmp"
-        annots_sidecar = tmp_path + '.annots.jsonl'
+        # Persistir sidecar em pasta temporária do sistema para evitar
+        # vazamento de arquivos .annots.jsonl junto ao diretório de export
+        try:
+            import tempfile, uuid
+            tmp_dir = tempfile.gettempdir()
+            unique = uuid.uuid4().hex
+            # nome legível baseado no nome do pdf final + sufixo único
+            annots_sidecar = os.path.join(tmp_dir, f"{os.path.basename(path)}.tmp.{unique}.annots.jsonl")
+        except Exception:
+            # fallback para colocá-lo ao lado do tmp (comportamento anterior)
+            annots_sidecar = tmp_path + '.annots.jsonl'
+        try:
+            # log curto para diagnóstico: onde o sidecar será escrito
+            print(f"annots_sidecar path: {annots_sidecar}", file=sys.stderr)
+        except Exception:
+            pass
         doc = BaseDocTemplate(tmp_path, pagesize=A4)
         sidebar_width = 1.0 * inch
         gap = 8
