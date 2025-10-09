@@ -4,41 +4,15 @@ Este arquivo contém a implementação completa que antes vivia em `csinfo.py` n
 do projeto. Foi movida para dentro do pacote para permitir importação limpa
 (`import csinfo`) e facilitar o empacotamento com PyInstaller.
 """
-"""Implementação interna do pacote csinfo.
-
-Este arquivo contém a implementação completa que antes vivia em `csinfo.py` na raiz
-do projeto. Foi movida para dentro do pacote para permitir importação limpa
-(`import csinfo`) e facilitar o empacotamento com PyInstaller.
-"""
-
 # Conteúdo migrado de csinfo.py
 import socket
 import json
+import re
 import tempfile
 import os
 
-# Helper público: credencial padrão usada por run_powershell quando não é passada explicitamente
-def set_default_credential(user, password):
-    """Define credencial padrão (user, password) usada para tentativas remotas.
-
-    Uso: csinfo.set_default_credential('DOMAIN\\user', 'senha')
-    """
-    try:
-        globals()['_CSINFO_DEFAULT_CREDENTIAL'] = (user, password)
-        return True
-    except Exception:
-        return False
-
-def clear_default_credential():
-    try:
-        if '_CSINFO_DEFAULT_CREDENTIAL' in globals():
-            del globals()['_CSINFO_DEFAULT_CREDENTIAL']
-        return True
-    except Exception:
-        return False
-
 def get_debug_session_log():
-    """Retorna o path do arquivo de sessão de debug atual, se existir. Pode ser usado pela GUI para anexar o log.
+    """Retorna o path do arquivo de sessão de debug atual, se existir.
 
     Retorna None se CSINFO_DEBUG não estiver habilitado ou se o log não existir.
     """
@@ -49,6 +23,31 @@ def get_debug_session_log():
     except Exception:
         pass
     return None
+
+
+# Credencial padrão usada por run_powershell quando não fornecida explicitamente
+_CSINFO_DEFAULT_CREDENTIAL = None
+
+
+def set_default_credential(user, password):
+    """Define uma credencial padrão (usuário, senha) usada por run_powershell.
+
+    A implementação armazena em uma variável global do módulo. A validação
+    é mínima — preservamos os valores como strings.
+    """
+    global _CSINFO_DEFAULT_CREDENTIAL
+    try:
+        _CSINFO_DEFAULT_CREDENTIAL = (str(user), str(password))
+    except Exception:
+        _CSINFO_DEFAULT_CREDENTIAL = (user, password)
+    return True
+
+
+def clear_default_credential():
+    """Limpa a credencial padrão previamente definida."""
+    global _CSINFO_DEFAULT_CREDENTIAL
+    _CSINFO_DEFAULT_CREDENTIAL = None
+    return True
 
 def get_network_details(computer_name=None):
     ps = r'''
@@ -205,6 +204,61 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfutils
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase import pdfmetrics
+
+# --- Helpers para criação de títulos e índice com anchors/links internos ---
+def criar_titulo_pdf(secao, styles=None):
+    """Retorna um Paragraph que contém um anchor nomeado igual ao texto da seção.
+
+    Uso:
+        estilo = section_title_styles.get(secao, styles['Heading2'])
+        p = criar_titulo_pdf('INFORMAÇÕES DO SISTEMA', styles)
+
+    Isso cria internamente: <a name='INFORMAÇÕES DO SISTEMA'/>INFORMAÇÕES DO SISTEMA
+    """
+    try:
+        if styles is None:
+            styles = getSampleStyleSheet()
+        estilo = None
+        try:
+            estilo = styles.get(secao)
+        except Exception:
+            estilo = None
+        if estilo is None:
+            # fallback genérico
+            estilo = ParagraphStyle('SectionTitle', parent=styles['Heading2'], fontSize=10, leading=12, textColor=colors.whitesmoke, fontName='Helvetica-Bold')
+        texto = f"<a name='{secao}'/>{secao}"
+        return Paragraph(texto, estilo)
+    except Exception:
+        # Em caso de erro, retornar um Paragraph simples
+        try:
+            return Paragraph(secao, styles['Normal'])
+        except Exception:
+            return Paragraph(str(secao), getSampleStyleSheet()['Normal'])
+
+
+def criar_indice_pdf(itens, styles=None, indice_style_name='IndiceStyle'):
+    """Retorna uma lista de flowables (Paragraph + Spacer) representando o índice lateral.
+
+    Cada item será renderizado como um link interno para o anchor com o mesmo nome.
+    Exemplo de tag usado: <a href='#INFORMAÇÕES DO SISTEMA'>INFORMAÇÕES DO SISTEMA</a>
+    """
+    try:
+        if styles is None:
+            styles = getSampleStyleSheet()
+        indice_estilo = ParagraphStyle(indice_style_name, parent=styles['Normal'], fontSize=9, textColor=colors.whitesmoke, leftIndent=4, leading=11)
+        flow = []
+        for item in itens:
+            # criar link interno usando tag <a href='#...'> disponível no ReportLab
+            # preservamos acentos e caixa do texto
+            link_text = f"<a href='#{item}'><font color='white'>{item}</font></a>"
+            flow.append(Paragraph(link_text, indice_estilo))
+            flow.append(Spacer(1, 4))
+        return flow
+    except Exception:
+        # fallback simples
+        sheet = getSampleStyleSheet()
+        return [Paragraph(i, sheet['Normal']) for i in itens]
+
 
 def run_powershell(cmd, computer_name=None, timeout=20, retries=2, initial_backoff=0.3, credential=None):
     """Execute um comando PowerShell com retries/backoff e timeout configurável.
@@ -1810,7 +1864,7 @@ def write_pdf_report(path, lines, computer_name):
         return False
     try:
         import os, sys, traceback
-        from reportlab.platypus import Table, TableStyle, PageTemplate, Frame, Spacer, Paragraph, Flowable
+        from reportlab.platypus import Table, TableStyle, PageTemplate, Frame, Spacer, Paragraph, Flowable, FrameBreak, NextPageTemplate
         from reportlab.lib.enums import TA_LEFT
         from reportlab.platypus import BaseDocTemplate
         from reportlab.lib.units import inch
@@ -1819,6 +1873,7 @@ def write_pdf_report(path, lines, computer_name):
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib import colors
         from reportlab.pdfgen import canvas
+        import re
 
         filtered_lines = remove_duplicate_lines(lines)
 
@@ -1853,24 +1908,93 @@ def write_pdf_report(path, lines, computer_name):
                 x_center = (A4[0] - text_width) / 2
                 self.drawString(x_center, 0.3 * inch, footer_text)
 
+        class MapCollectCanvas(canvas.Canvas):
+            """Canvas usado apenas para coletar bookmarks/destinos criados durante a
+            primeira passagem. Registra nome -> page_number em self.named_map.
+            """
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.named_map = {}
+                # manter referência da última instância criada para posterior leitura
+                try:
+                    MapCollectCanvas._last_instance = self
+                except Exception:
+                    pass
+
+            def bookmarkPage(self, name):
+                try:
+                    # registrar o número da página atual para este nome
+                    pnum = getattr(self, '_pageNumber', None)
+                    if pnum is None:
+                        pnum = 1
+                    self.named_map[name] = pnum
+                    try:
+                        # debug: log each bookmark observed during collection
+                        print(f"MapCollectCanvas.bookmarkPage: name={name!r} page={pnum}", file=sys.stderr)
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+                try:
+                    return super().bookmarkPage(name)
+                except Exception:
+                    return None
+            
+            def addOutlineEntry(self, title, key, level=0, closed=None):
+                """Intercepta a criação de entradas de outline (bookmarks) para
+                registrar também o mapeamento nome->página.
+                """
+                try:
+                    pnum = getattr(self, '_pageNumber', None)
+                    if pnum is None:
+                        pnum = 1
+                    if key:
+                        self.named_map[key] = pnum
+                except Exception:
+                    pass
+                try:
+                    return super().addOutlineEntry(title, key, level=level, closed=closed)
+                except Exception:
+                    return None
+
         # document and layout
         tmp_path = path + ".tmp"
+        annots_sidecar = tmp_path + '.annots.jsonl'
         doc = BaseDocTemplate(tmp_path, pagesize=A4)
-        sidebar_width = 1.2 * inch
-        # Não reservar espaço para o índice visível — o índice será apenas
-        # criado como bookmarks/outlines; usar a largura completa do corpo.
-        frame = Frame(
-            0.5 * inch,
-            0.6 * inch,
-            A4[0] - inch,
-            A4[1] - 1.35 * inch,
-            leftPadding=0,
-            bottomPadding=0,
-            rightPadding=0,
-            topPadding=0.15 * inch,
+        sidebar_width = 1.0 * inch
+        gap = 8
+        left_x = 0.5 * inch
+        left_y = 0.6 * inch
+        left_h = A4[1] - 1.35 * inch
+        left_frame = Frame(
+            left_x,
+            left_y,
+            sidebar_width - gap,
+            left_h,
+            leftPadding=6,
+            bottomPadding=6,
+            rightPadding=6,
+            topPadding=6,
+            id='left'
         )
 
-        # coletor de seções para o índice
+        # main_frame alinhado à esquerda sob o logo (logo x ~= 0.6*inch)
+        logo_x = 0.6 * inch
+        main_x = logo_x
+        # largura: margem esquerda+direita (0.5 in) subtraída do espaço do logo
+        main_frame = Frame(
+            main_x,
+            0.6 * inch,
+            A4[0] - main_x - 0.5 * inch,
+            A4[1] - 1.35 * inch,
+            leftPadding=0,
+            bottomPadding=6,
+            rightPadding=6,
+            topPadding=6,
+            id='main'
+        )
+
+    # coletor de seções para o índice
         toc_sections = []
 
         def add_toc_section(title, dest):
@@ -1896,10 +2020,96 @@ def write_pdf_report(path, lines, computer_name):
             def draw(self):
                 try:
                     self.canv.bookmarkPage(self.name)
+                    # tentar também registrar diretamente no coletor de mapa (caso bookmarkPage
+                    # não seja interceptado pela MapCollectCanvas por algum motivo)
+                    try:
+                        coll = getattr(MapCollectCanvas, '_last_instance', None)
+                        if coll is not None:
+                            pnum = getattr(self.canv, 'getPageNumber', None)
+                            try:
+                                pnum = self.canv.getPageNumber()
+                            except Exception:
+                                pnum = getattr(self.canv, '_pageNumber', None) or 1
+                            coll.named_map[self.name] = pnum
+                            try:
+                                print(f"SectionAnchor.registered directly: name={self.name!r} page={pnum}", file=sys.stderr)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
                     try:
                         self.canv.addOutlineEntry(self.title, self.name, level=0, closed=False)
                     except Exception:
                         pass
+                except Exception:
+                    pass
+
+        class LinkedParagraph(Flowable):
+            """Paragraph-like flowable that also creates an internal PDF link rectangle
+            to a named destination when drawn. The link area covers the paragraph box.
+            """
+            def __init__(self, text, style, destname=None):
+                super().__init__()
+                self.para = Paragraph(text, style)
+                self.dest = destname
+
+            def wrap(self, availWidth, availHeight):
+                w, h = self.para.wrap(availWidth, availHeight)
+                self._w = w
+                self._h = h
+                return w, h
+
+            def draw(self):
+                try:
+                    # draw paragraph at origin
+                    self.para.drawOn(self.canv, 0, 0)
+                    if self.dest:
+                        try:
+                            # registrar a área do link para criação posterior
+                            try:
+                                rect = self.canv._absRect((0, 0, self._w, self._h), relative=1)
+                            except Exception:
+                                rect = (0, 0, self._w, self._h)
+                            try:
+                                pnum = getattr(self.canv, 'getPageNumber', None)
+                                if pnum:
+                                    pnum = self.canv.getPageNumber()
+                                else:
+                                    pnum = getattr(self.canv, '_pageNumber', 1)
+                            except Exception:
+                                pnum = getattr(self.canv, '_pageNumber', 1)
+                            try:
+                                # tentar resolver destino para número de página (segunda passagem)
+                                tgt_page = None
+                                try:
+                                    named_map_local = None
+                                    named_map_local = getattr(self.canv, '_named_map', None) or getattr(MapCollectCanvas, '_named_map', None)
+                                    if named_map_local and isinstance(named_map_local, dict):
+                                        if isinstance(self.dest, str) and self.dest in named_map_local:
+                                            tgt_page = named_map_local[self.dest]
+                                except Exception:
+                                    tgt_page = None
+                                annotations_to_create.append((pnum, rect, self.dest))
+                                # persistir em sidecar para pós-processamento confiável
+                                try:
+                                    import json
+                                    payload = {'page': pnum, 'rect': rect, 'dest': self.dest}
+                                    if tgt_page:
+                                        payload['tgt_page'] = int(tgt_page)
+                                    with open(annots_sidecar, 'a', encoding='utf-8') as _af:
+                                        _af.write(json.dumps(payload) + '\n')
+                                except Exception:
+                                    pass
+                            except Exception:
+                                pass
+                            # tentar criar a anotação diretamente usando o nome do destino
+                            try:
+                                # relative=0 garante coordenadas em coordenadas de página
+                                self.canv.linkRect('', self.dest, rect, relative=0)
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
                 except Exception:
                     pass
 
@@ -1948,20 +2158,95 @@ def write_pdf_report(path, lines, computer_name):
             canvas_obj.line(0.5 * inch, y_title - (0.12 * inch), A4[0] - 0.5 * inch, y_title - (0.12 * inch))
             canvas_obj.restoreState()
 
-        def draw_sidebar(canvas_obj, doc_obj):
-            # Intencionalmente vazio — sidebar removida por solicitação do usuário.
-            # Mantemos a função para compatibilidade, mas não desenhamos nada.
-            return
+        def draw_sidebar_on_canvas(canvas_obj, doc_obj):
+            # desenha o índice no lado esquerdo da primeira página diretamente no canvas
+            try:
+                if not toc_sections:
+                    return
+                try:
+                    if not pdf_sidebar_enabled:
+                        return
+                except Exception:
+                    pass
+                # área do sidebar
+                try:
+                    x = left_x
+                    w = sidebar_width - gap
+                    y_top = A4[1] - 1.05 * inch
+                    y = y_top
+                    line_h = 12
+                    # background do sidebar
+                    canvas_obj.saveState()
+                    canvas_obj.setFillColor(colors.Color(0.2, 0.2, 0.2))
+                    canvas_obj.rect(x, 0.6 * inch, w, left_h, fill=1, stroke=0)
+                    canvas_obj.setFont('Helvetica', 8)
+                    canvas_obj.setFillColor(colors.whitesmoke)
+                    # desenhar cada item com link para o destino
+                    for title, dest in toc_sections:
+                        if y - (line_h - 2) < 0.7 * inch:
+                            break
+                        # desenhar texto e tentar criar link (registrar para pós-processamento e
+                        # também chamar canvas.linkRect como fallback imediato)
+                        try:
+                            canvas_obj.drawString(x + 6, y, clean_text(title))
+                            txt_w = canvas_obj.stringWidth(clean_text(title), 'Helvetica', 8)
+                            rect = (x + 6, y - 2, x + 6 + txt_w, y + 10)
+                            pnum = getattr(canvas_obj, 'getPageNumber', None)
+                            if pnum:
+                                try:
+                                    pnum = canvas_obj.getPageNumber()
+                                except Exception:
+                                    pnum = getattr(canvas_obj, '_pageNumber', 1)
+                            else:
+                                pnum = getattr(canvas_obj, '_pageNumber', 1)
+                                try:
+                                    # tentar resolver destino para número de página
+                                    tgt_page = None
+                                    try:
+                                        named_map_local = getattr(canvas_obj, '_named_map', None) or getattr(MapCollectCanvas, '_named_map', None)
+                                        if named_map_local and isinstance(named_map_local, dict) and isinstance(dest, str) and dest in named_map_local:
+                                            tgt_page = named_map_local[dest]
+                                    except Exception:
+                                        tgt_page = None
+                                    annotations_to_create.append((pnum, rect, dest))
+                                    try:
+                                        import json
+                                        payload = {'page': pnum, 'rect': rect, 'dest': dest}
+                                        if tgt_page:
+                                            payload['tgt_page'] = int(tgt_page)
+                                        with open(annots_sidecar, 'a', encoding='utf-8') as _af:
+                                            _af.write(json.dumps(payload) + '\n')
+                                    except Exception:
+                                        pass
+                                except Exception:
+                                    pass
+                            try:
+                                canvas_obj.linkRect('', dest, rect, relative=0)
+                            except Exception:
+                                pass
+                        except Exception:
+                            # se falhar ao desenhar/registrar este item, ignore e prossiga
+                            pass
+                        y -= line_h
+                    canvas_obj.restoreState()
+                except Exception:
+                    pass
+            except Exception:
+                pass
 
         def draw_page(canvas_obj, doc_obj):
             # Cabeçalho com título e logo
             draw_header(canvas_obj, doc_obj)
-            # A sidebar/índice foi removida por solicitação — não desenhar
+            # desenhar sidebar interativo apenas na primeira página
+            try:
+                if doc_obj.page == 1:
+                    draw_sidebar_on_canvas(canvas_obj, doc_obj)
+            except Exception:
+                pass
 
-        template = PageTemplate(id='normal', frames=[frame], onPage=draw_page)
-        doc.addPageTemplates([template])
-
+        # coletará anotações para criar no pós-processamento: (page_num, rect, destname)
         story = []
+        annotations_to_create = []
         styles = getSampleStyleSheet()
         header_style = ParagraphStyle('CSInfoHeader', parent=styles['Normal'], fontSize=10, textColor=colors.navy, alignment=TA_LEFT, spaceAfter=6, leading=13, fontName='Helvetica-Bold')
         # Use cor neutra para títulos das seções no corpo (preto). O índice lateral manterá a cor azul.
@@ -2025,8 +2310,9 @@ def write_pdf_report(path, lines, computer_name):
             id_title_style = ParagraphStyle('IdTitle', parent=styles['Normal'], fontSize=10, leading=12, alignment=TA_LEFT, fontName='Helvetica-Bold', textColor=colors.white)
             id_dest = 'sec_IDENTIFICACAO'
             add_toc_section('IDENTIFICAÇÃO', id_dest)
+            # garantir anchor literal também: criar_titulo_pdf insere <a name='IDENTIFICAÇÃO'/>
             story.append(SectionAnchor(id_dest, 'IDENTIFICAÇÃO'))
-            title_para = Paragraph('<b>IDENTIFICAÇÃO</b>', id_title_style)
+            title_para = criar_titulo_pdf('IDENTIFICAÇÃO', styles=styles)
             table_width = A4[0] - inch
             tbl = Table([[title_para]], colWidths=[table_width])
             tbl.setStyle(TableStyle([('BACKGROUND', (0, 0), (0, 0), colors.Color(0.5, 0.5, 0.5)), ('LEFTPADDING', (0, 0), (0, 0), 6), ('RIGHTPADDING', (0, 0), (0, 0), 6), ('TOPPADDING', (0, 0), (0, 0), 6), ('BOTTOMPADDING', (0, 0), (0, 0), 6),]))
@@ -2060,8 +2346,10 @@ def write_pdf_report(path, lines, computer_name):
         try:
             import csinfo as _cs
             pdf_field_colors = getattr(_cs, '__pdf_field_colors__', {}) or {}
+            pdf_sidebar_enabled = getattr(_cs, '__pdf_sidebar_enabled__', True)
         except Exception:
             pdf_field_colors = {}
+            pdf_sidebar_enabled = True
 
         # Filtrar eventuais linhas que representam o próprio índice (várias variantes)
         def _normalize(s):
@@ -2092,7 +2380,16 @@ def write_pdf_report(path, lines, computer_name):
 
         # Sumário removido: não inserir página de sumário no documento.
         # Os bookmarks (SectionAnchor) são mantidos para navegação via outline,
-        # mas não geramos uma página de índice visível.
+        # mas agora transformamos títulos de seção em agrupamentos: o corpo
+        # mostra apenas o título (resumo) e um link "Ver detalhes"; os detalhes
+        # completos de cada agrupamento são adicionados ao final do documento
+        # em seções separadas. Isso simula um comportamento de expand/retract
+        # sem Javascript, usando links/named destinations.
+
+        # Preparar coleta de linhas por grupo
+        group_contents = {}
+        current_group = None
+        collecting_group = False
 
         for idx, line in enumerate(iter_lines):
             line_stripped = line.strip()
@@ -2119,27 +2416,41 @@ def write_pdf_report(path, lines, computer_name):
             if any(alias in _normalize(line_stripped) for alias in index_aliases):
                 continue
             if line_stripped in section_title_styles:
+                # iniciar novo agrupamento: registrar destino e criar resumo
                 destname = 'sec_' + re.sub(r'[^0-9a-zA-Z_]', '_', line_stripped).upper()
-                # Adiciona âncora para navegação
+                detail_dest = 'detail_' + destname
+                # âncora do título-resumo (bookmark)
                 story.append(SectionAnchor(destname, line_stripped))
                 try:
                     add_toc_section(line_stripped, destname)
                 except Exception:
                     pass
                 try:
-                    title_para = Paragraph(f"<b>{clean_text(line_stripped)}</b>", section_title_styles[line_stripped])
+                    # criar título com link para a seção de detalhes
+                    link_text = f"{clean_text(line_stripped)} [ver detalhes]"
+                    # usar LinkedParagraph para garantir área de link funcional
+                    title_para = LinkedParagraph(link_text, section_title_styles.get(line_stripped, header_style), destname=detail_dest)
                     table_width = A4[0] - inch
                     tbl = Table([[title_para]], colWidths=[table_width])
                     tbl.setStyle(TableStyle([('BACKGROUND', (0, 0), (0, 0), colors.Color(0.5, 0.5, 0.5)), ('LEFTPADDING', (0, 0), (0, 0), 6), ('RIGHTPADDING', (0, 0), (0, 0), 6), ('TOPPADDING', (0, 0), (0, 0), 6), ('BOTTOMPADDING', (0, 0), (0, 0), 6),]))
                     story.append(tbl)
                 except Exception:
                     try:
-                        story.append(Paragraph(f"<b>{clean_text(line_stripped)}</b>", section_title_styles[line_stripped]))
+                        story.append(Paragraph(clean_text(line_stripped), section_title_styles.get(line_stripped, header_style)))
                     except Exception:
                         pass
+                # iniciar coleta de linhas do grupo (não inserir conteúdo no corpo)
+                current_group = destname
+                collecting_group = True
+                group_contents[current_group] = []
                 continue
 
             if line_stripped == "CSInfo by CEOsoftware":
+                continue
+
+            if collecting_group and current_group:
+                # armazenar linha no grupo atual
+                group_contents[current_group].append(line)
                 continue
 
             if line.startswith("    "):
@@ -2225,9 +2536,345 @@ def write_pdf_report(path, lines, computer_name):
             pass
 
         try:
-            doc.build(story, canvasmaker=NumberedCanvas)
+            # Inserir o índice lateral (como links) no início do story
+            try:
+                # construir índice usando (titulo, dest) para que o href aponte
+                # exatamente para os destinos (dest) já registrados pelo
+                # SectionAnchor (ex.: 'sec_IDENTIFICACAO'). Isso evita erros
+                # de "undefined destination target" quando o link apontar
+                # para um nome que não existe como bookmark.
+                if toc_sections:
+                    indice_estilo = ParagraphStyle('IndiceInline', parent=styles['Normal'], fontSize=9, textColor=colors.whitesmoke, leftIndent=4, leading=11)
+                    idx_flow = []
+                    for title, dest in toc_sections:
+                        try:
+                            link_text = f"<a href='#{dest}'><font color='white'>{clean_text(title)}</font></a>"
+                            idx_flow.append(Paragraph(link_text, indice_estilo))
+                            idx_flow.append(Spacer(1, 4))
+                        except Exception:
+                            try:
+                                idx_flow.append(Paragraph(clean_text(title), indice_estilo))
+                                idx_flow.append(Spacer(1, 4))
+                            except Exception:
+                                pass
+                    # O índice será desenhado diretamente no canvas; não
+                    # inserir os flowables do índice no story para evitar
+                    # layout em colunas.
+                    # (idx_flow descartado)
+                    pass
+            except Exception:
+                pass
+
+            # preparar os templates: 'first' com main_frame deslocado (para não sobrepor o sidebar)
+            # e 'later' com frame full-width para as páginas subsequentes
+            try:
+                main_frame_later = Frame(
+                    left_x,
+                    0.6 * inch,
+                    A4[0] - inch,
+                    A4[1] - 1.35 * inch,
+                    leftPadding=0,
+                    bottomPadding=6,
+                    rightPadding=6,
+                    topPadding=6,
+                    id='main_later'
+                )
+                template_first = PageTemplate(id='first', frames=[main_frame], onPage=draw_page)
+                template_later = PageTemplate(id='later', frames=[main_frame_later], onPage=draw_page)
+                doc.addPageTemplates([template_first, template_later])
+                # garantir que, após a primeira página, o template 'later' seja usado
+                try:
+                    # inserir NextPageTemplate apenas se a sidebar estiver habilitada
+                    try:
+                        if pdf_sidebar_enabled:
+                            story = [NextPageTemplate('later')] + story
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+            # DEBUG: informações de layout para ajudar a diagnosticar páginas em branco / colunas
+            try:
+                print(f"PDF tmp: {tmp_path}", file=sys.stderr)
+                print(f"toc_sections count: {len(toc_sections)}", file=sys.stderr)
+                try:
+                    print(f"left_frame: x={left_x}, width={sidebar_width - gap}, height={left_h}", file=sys.stderr)
+                    print(f"main_frame: x={main_x}, width={A4[0] - inch - sidebar_width - gap}", file=sys.stderr)
+                except Exception:
+                    pass
+                # listar os primeiros flowables do story para depuração
+                try:
+                    print(f"story length: {len(story)}", file=sys.stderr)
+                    for i, f in enumerate(story[:20]):
+                        try:
+                            tname = type(f).__name__
+                            preview = ''
+                            if hasattr(f, 'getPlainText'):
+                                preview = f.getPlainText()[:80].replace('\n', ' ')
+                            elif hasattr(f, 'text'):
+                                preview = str(f.text)[:80]
+                            else:
+                                preview = repr(f)[:80]
+                            print(f"[{i}] {tname}: {preview}", file=sys.stderr)
+                        except Exception:
+                            print(f"[{i}] {type(f).__name__}", file=sys.stderr)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+            # Adicionar seções de detalhe para cada agrupamento coletado
+            try:
+                if group_contents:
+                    story.append(PageBreak())
+                    for sec_dest, lines in list(group_contents.items()):
+                        try:
+                            detail_dest = 'detail_' + sec_dest
+                            # buscar o título legível a partir do toc (se disponível)
+                            title_text = sec_dest
+                            try:
+                                for t, d in toc_sections:
+                                    if d == sec_dest:
+                                        title_text = t
+                                        break
+                            except Exception:
+                                pass
+                            # âncora para destino de detalhes: criar via SectionAnchor (bookmark)
+                            try:
+                                story.append(SectionAnchor(detail_dest, f"Detalhes: {title_text}"))
+                            except Exception:
+                                pass
+                            # título de detalhe com link de volta
+                            try:
+                                # usar LinkedParagraph para o link de voltar
+                                story.append(LinkedParagraph(f"<b>Detalhes: {clean_text(title_text)}</b> [voltar]", header_style, destname=sec_dest))
+                            except Exception:
+                                try:
+                                    story.append(Paragraph(f"Detalhes: {clean_text(title_text)}", header_style))
+                                except Exception:
+                                    pass
+                            story.append(Spacer(1, 6))
+                            # conteúdo do grupo
+                            for raw in lines:
+                                try:
+                                    ln = raw.rstrip('\n')
+                                    if ln.startswith('    '):
+                                        story.append(Paragraph(clean_text(ln.strip()), double_indented_style))
+                                    elif ln.startswith('  '):
+                                        story.append(Paragraph(clean_text(ln.strip()), indented_style))
+                                    else:
+                                        story.append(Paragraph(clean_text(ln.strip()), normal_style))
+                                except Exception:
+                                    pass
+                            story.append(Spacer(1, 12))
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            # primeira passagem: coletar mapa de nomes -> página
+            try:
+                try:
+                    MapCollectCanvas._last_instance = None
+                except Exception:
+                    pass
+                # limpar sidecar antes da primeira passagem
+                try:
+                    if os.path.exists(annots_sidecar):
+                        os.remove(annots_sidecar)
+                except Exception:
+                    pass
+                try:
+                    doc.build(story, canvasmaker=MapCollectCanvas)
+                except Exception:
+                    pass
+                try:
+                    coll = getattr(MapCollectCanvas, '_last_instance', None)
+                    named_map = coll.named_map if coll is not None else {}
+                    try:
+                        print('collected_named_map:', named_map, file=sys.stderr)
+                    except Exception:
+                        pass
+                except Exception:
+                    named_map = {}
+            except Exception:
+                named_map = {}
+
+            # segunda passagem: build final com canvas numerado
+            try:
+                # anexar o mapa coletado às classes/canvas para que os flowables
+                # possam criar anotações paginadas na segunda passagem
+                try:
+                    NumberedCanvas._named_map = named_map
+                except Exception:
+                    pass
+                try:
+                    MapCollectCanvas._named_map = named_map
+                except Exception:
+                    pass
+                # limpar sidecar antes da segunda passagem para gravar posições reais
+                try:
+                    if os.path.exists(annots_sidecar):
+                        os.remove(annots_sidecar)
+                except Exception:
+                    pass
+                try:
+                    doc.build(story, canvasmaker=NumberedCanvas)
+                except Exception:
+                    # fallback: tentar uma build simples
+                    doc.build(story)
+            except Exception:
+                # fallback handled above
+                pass
             # move temp file to final path atomically
             try:
+                # tentar corrigir anotações internas pós-processando o PDF temporário
+                def _fix_annotation_destinations(pdf_path, name_map=None, annotations_list=None):
+                    try:
+                        from pypdf import PdfReader, PdfWriter
+                        from pypdf.generic import DictionaryObject, NameObject, ArrayObject, FloatObject, NumberObject
+                    except Exception:
+                        return False
+
+                    try:
+                        rdr = PdfReader(pdf_path)
+                        # carregar sidecar se necessário
+                        if not annotations_list:
+                            annotations_list = []
+                            try:
+                                import json
+                                if os.path.exists(annots_sidecar):
+                                    with open(annots_sidecar, 'r', encoding='utf-8') as _af:
+                                        for ln in _af:
+                                            try:
+                                                obj = json.loads(ln)
+                                                annotations_list.append((obj.get('page'), tuple(obj.get('rect')), obj.get('dest')))
+                                            except Exception:
+                                                pass
+                            except Exception:
+                                annotations_list = annotations_list or []
+
+                        nd = getattr(rdr, 'named_destinations', None) or {}
+
+                        writer = PdfWriter()
+                        # append all pages first so writer has its own page objects/refs
+                        writer.append_pages_from_reader(rdr)
+
+                        # collect existing annots from writer pages and preserve non-Link ones
+                        num_pages = len(writer.pages)
+                        page_new_annots = {i: [] for i in range(num_pages)}
+                        for i in range(num_pages):
+                            try:
+                                existing = writer.pages[i].get('/Annots') or []
+                            except Exception:
+                                existing = []
+                            kept = []
+                            for a in existing:
+                                try:
+                                    obj = a.get_object()
+                                    subtype = obj.get('/Subtype')
+                                    if subtype != '/Link':
+                                        kept.append(a)
+                                except Exception:
+                                    kept.append(a)
+                            page_new_annots[i] = kept
+
+                        # create named destinations in writer for every target used
+                        dest_to_index = {}
+                        for (_pnum, _rect, destname) in (annotations_list or []):
+                            if destname in dest_to_index:
+                                continue
+                            # try to resolve the target page
+                            tgt_page = None
+                            if name_map and destname in name_map:
+                                tgt_page = name_map[destname]
+                            elif destname in nd:
+                                try:
+                                    tgt_page = rdr.get_destination_page_number(nd[destname]) + 1
+                                except Exception:
+                                    tgt_page = None
+                            if not tgt_page:
+                                continue
+                            tgt_index = int(tgt_page) - 1
+                            if tgt_index < 0 or tgt_index >= num_pages:
+                                continue
+                            dest_to_index[destname] = tgt_index
+
+                        # register named destinations in writer
+                        for destname, tgt_index in dest_to_index.items():
+                            try:
+                                # pypdf expects a name and a page (object or index)
+                                writer.add_named_destination(destname, writer.pages[tgt_index])
+                            except Exception:
+                                try:
+                                    writer.add_named_destination(destname, tgt_index)
+                                except Exception:
+                                    pass
+
+                        # create new annotations and append to the appropriate writer page
+                        for (pnum, rect, destname) in (annotations_list or []):
+                            try:
+                                page_index = int(pnum) - 1
+                                if page_index < 0 or page_index >= num_pages:
+                                    continue
+                                # create an annotation that performs a GoTo to the named destination
+                                if destname not in dest_to_index:
+                                    continue
+                                ann = DictionaryObject()
+                                ann[NameObject('/Type')] = NameObject('/Annot')
+                                ann[NameObject('/Subtype')] = NameObject('/Link')
+                                x0, y0, x1, y1 = rect
+                                ann[NameObject('/Rect')] = ArrayObject([FloatObject(x0), FloatObject(y0), FloatObject(x1), FloatObject(y1)])
+                                ann[NameObject('/Border')] = ArrayObject([NumberObject(0), NumberObject(0), NumberObject(0)])
+                                # action dictionary: /S /GoTo, /D <name>
+                                action = DictionaryObject()
+                                action[NameObject('/S')] = NameObject('/GoTo')
+                                # Named destination should be a Name or string; use NameObject with leading slash
+                                try:
+                                    action[NameObject('/D')] = NameObject('/' + destname)
+                                except Exception:
+                                    try:
+                                        from pypdf.generic import TextStringObject
+                                        action[NameObject('/D')] = TextStringObject(destname)
+                                    except Exception:
+                                        action[NameObject('/D')] = NameObject('/' + destname)
+                                ann[NameObject('/A')] = action
+                                try:
+                                    newref = writer._add_object(ann)
+                                    page_new_annots[page_index].append(newref)
+                                except Exception:
+                                    page_new_annots[page_index].append(ann)
+                            except Exception:
+                                pass
+
+                        # assign updated Annots arrays back to writer pages
+                        from collections import defaultdict
+                        for i in range(num_pages):
+                            try:
+                                writer.pages[i][NameObject('/Annots')] = ArrayObject(page_new_annots[i])
+                            except Exception:
+                                pass
+
+                        outp = pdf_path + '.fixed'
+                        with open(outp, 'wb') as f:
+                            writer.write(f)
+                        try:
+                            os.replace(outp, pdf_path)
+                        except Exception:
+                            try:
+                                os.remove(pdf_path)
+                                os.replace(outp, pdf_path)
+                            except Exception:
+                                pass
+                        return True
+                    except Exception:
+                        return False
+
+                try:
+                    _fix_annotation_destinations(tmp_path, name_map=named_map, annotations_list=annotations_to_create)
+                except Exception:
+                    pass
                 if os.path.exists(tmp_path):
                     os.replace(tmp_path, path)
             except Exception:
@@ -2247,6 +2894,15 @@ def write_pdf_report(path, lines, computer_name):
                 pass
             return False
     except Exception:
+        try:
+            import traceback as _tb, sys as _sys
+            _txt = _tb.format_exc()
+            try:
+                print("write_pdf_report top-level exception:", _txt, file=_sys.stderr)
+            except Exception:
+                pass
+        except Exception:
+            pass
         return False
 
 def check_remote_machine(computer_name):

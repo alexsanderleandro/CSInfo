@@ -1,0 +1,213 @@
+﻿CEOsoftware Sistemas
+CSInfo - Inventário de hardware e software - v25.10.06 rev 2
+
+Nome do computador: CEOSOFT-059
+Tipo: Desktop
+Gerado por: alex
+
+Relatório gerado em: 09/10/2025 - 09:47
+
+INFORMAÇÕES DO SISTEMA
+Versão do sistema operacional: Microsoft Windows 11 Pro (Version 10.0.26100) - 64 bits
+  Status do sistema operacional: Ativado
+
+Versão do Office: Microsoft Office Professional Plus 2019 - pt-br 16.0.19127.20264
+  Status do Office: Ativado
+
+SQL Server 1: Instância: Default | Versão: 16.0.1000.6 | Status: Stopped
+
+Antivírus 1: Kaspersky | Status: Ativado
+Antivírus 2: Windows Defender | Status: Desconhecido
+
+Rede: Domínio: ceosoftwaread.net
+
+INFORMAÇÕES DE HARDWARE
+Memória RAM total: 7.87 GB
+  Pente de Memória 1: 8 GB | DDR4 | 2400 MHz | DIMM
+    Fabricante: 8945
+
+Processador 1: Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz
+  Cores: 4 físicos | 8 lógicos
+  Cache: L2: 1 MB | L3: 8 MB
+  Fabricante: GenuineIntel
+
+Disco 1: ST1000DM010-2EP102 | Tamanho: 931.51 GB
+  Tipo: HDD | Interface: IDE
+Disco 2: KINGSTON SA400S37960G | Tamanho: 894.25 GB
+  Tipo: HDD | Interface: IDE
+Unidade C: (Sem rótulo) | Total: 893.51 GB | Usado: 550.51 GB | Livre: 343.00 GB | Sistema: NTFS
+Unidade D: (Sem rótulo) | Total: 465.37 GB | Usado: 318.79 GB | Livre: 146.58 GB | Sistema: NTFS
+Unidade E: (Partição 2) | Total: 435.29 GB | Usado: 135.91 GB | Livre: 299.38 GB | Sistema: NTFS
+Unidade F: (Swapping) | Total: 29.30 GB | Usado: 1.76 GB | Livre: 27.54 GB | Sistema: NTFS
+Monitor 1: GSM | Modelo: LG FULL HD | Serial: 16843009
+Monitor 2: DEL | Modelo: DELL E1910 | Serial: X234R03V0SYL
+Teclado conectado: SIM
+Mouse conectado: SIM
+Placa mãe: ASUSTeK COMPUTER INC. | Modelo: H110M-C/BR | Serial: 180414466200454
+Placa de Rede 1: Realtek PCIe GBE Family Controller | Fabricante: Realtek | Velocidade: 100 Mbps | MAC: 2C:FD:A1:C8:77:61
+Placa de Vídeo 1: BB Capture Driver | Fabricante: Blueberry Consultants | Memória: N/A | Tipo: Onboard (Integrada)
+Placa de Vídeo 2: NVIDIA GeForce GT 220  | Fabricante: NVIDIA | Memória: 1 GB | Tipo: Offboard (Dedicada)
+Placa de Vídeo 3: Intel(R) HD Graphics 630 | Fabricante: Intel Corporation | Memória: 1 GB | Tipo: Onboard (Integrada)
+Impressora 1: OneNote (Desktop) | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Send to Microsoft OneNote 16 Driver
+Impressora 2: NPI1F7468 (HP LaserJet Professional M1212nf MFP) | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: HP LaserJet Mono PCLmS Class Driver
+Impressora 3: Microsoft Print to PDF | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Microsoft Print To PDF
+Impressora 4: HP LaserJet 1020 | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: HP LaserJet 1020
+INFORMAÇÕES DE REDE
+Adaptador 1: Realtek PCIe GBE Family Controller
+  IP: 192.168.0.159 | Gateway: 192.168.0.1 | DNS: 192.168.0.3, 192.168.0.4 | MAC: 2C:FD:A1:C8:77:61
+SEGURANÇA DO SISTEMA
+Firewall:
+  Perfil: Domain | Status: Desativado
+  Perfil: Private | Status: Desativado
+  Perfil: Public | Status: Desativado
+Windows Update:
+  3 atualizações pendentes
+CSInfo by CEOsoftware
+ADMINISTRADORES
+Administrador 1: CEOSOFT-059\Administrador
+Administrador 2: CEOSOFT-059\CEOSOFTWARE
+Administrador 3: CEOSOFTWAREAD\Admins. do domínio
+Administrador 4: CEOSOFTWAREAD\alex
+Administrador 5: CEOSOFTWAREAD\Angelo.Gabriel
+Administrador 6: CEOSOFTWAREAD\geovani
+Administrador 7: CEOSOFTWAREAD\Marco.Aurelio
+SOFTWARES INSTALADOS
+1. Android Studio | Versão: 2025.1 | Editor: Google LLC
+2. Arquivo do WinRAR | Versão: N/A | Editor: N/A
+3. Arquivos de Suporte à Instalação do Microsoft SQL Server 2008  | Versão: 10.3.5500.0 | Editor: Microsoft Corporation
+4. Atualizações da NVIDIA 10.4.0 | Versão: 10.4.0 | Editor: NVIDIA Corporation
+5. BraZip Central | Versão: 25.0.3 | Editor: BraZip Tecnologia
+6. CSServiceCenter | Versão: 1.0.0 | Editor: CEOSoftware Sistemas de Informática
+7. Data Dynamics ActiveReports Professional 2 | Versão: 2.3.0.1261 | Editor: Data Dynamics, Ltd.
+8. dbForge SQL Complete, v6.15.5 | Versão: 6.15.5 | Editor: Devart
+9. DiagnosticsHub_CollectionService | Versão: 17.14.36412 | Editor: Microsoft Corporation
+10. Eclipse Temurin JDK with Hotspot 21.0.8+9 (x64) | Versão: 21.0.8.9 | Editor: Eclipse Adoptium
+11. Eclipse Temurin JDK with Hotspot 8u462-b08 (x64) | Versão: 8.0.462.8 | Editor: Eclipse Adoptium
+12. ERP CEOSoftware 8_2 | Versão: 8.2 | Editor: CEOSoftware Sistemas de Informática
+13. Ferramentas de Build do Visual Studio 2019 | Versão: 16.11.51 | Editor: Microsoft Corporation
+14. FileZilla 3.69.3 | Versão: 3.69.3 | Editor: Tim Kosse
+15. Flashback Express 7 | Versão: 7.7.0.445 | Editor: Blueberry Software
+16. GatewayComponents | Versão: 16.22.5 | Editor: Microsoft Corporation
+17. Git | Versão: 2.51.0.2 | Editor: The Git Development Community
+18. Google Chrome | Versão: 141.0.7390.56 | Editor: Google LLC
+19. Gravador VSS da Microsoft para SQL Server 2022 | Versão: 16.0.1000.6 | Editor: Microsoft Corporation
+20. HP LaserJet 1020 Series | Versão: N/A | Editor: N/A
+21. Instalação do Microsoft SQL Server 2014 (em inglês) | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+22. Kaspersky | Versão: 21.22.7.466 | Editor: Kaspersky
+23. Microsoft .NET Framework 4 Multi-Targeting Pack | Versão: 4.0.30319 | Editor: Microsoft Corporation
+24. Microsoft .NET Host - 8.0.20 (x64) | Versão: 64.80.39230 | Editor: Microsoft Corporation
+25. Microsoft .NET Host FX Resolver - 8.0.20 (x64) | Versão: 64.80.39230 | Editor: Microsoft Corporation
+26. Microsoft .NET Runtime - 8.0.20 (x64) | Versão: 64.80.39230 | Editor: Microsoft Corporation
+27. Microsoft Application Error Reporting | Versão: 12.0.6012.5000 | Editor: Microsoft Corporation
+28. Microsoft Edge | Versão: 141.0.3537.57 | Editor: Microsoft Corporation
+29. Microsoft Edge WebView2 Runtime | Versão: 141.0.3537.57 | Editor: Microsoft Corporation
+30. Microsoft Fabric Integration Runtime | Versão: 5.55.9295.2 | Editor: Microsoft Corporation
+31. Microsoft Help Viewer 1.1 | Versão: 1.1.40219 | Editor: Microsoft Corporation
+32. Microsoft Help Viewer 1.1 Language Pack - PTB | Versão: 1.1.40219 | Editor: Microsoft Corporation
+33. Microsoft ODBC Driver 11 for SQL Server | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+34. Microsoft ODBC Driver 17 for SQL Server | Versão: 17.10.6.1 | Editor: Microsoft Corporation
+35. Microsoft Office 2003 Web Components | Versão: 11.0.8173.0 | Editor: Microsoft Corporation
+36. Microsoft Office Professional Plus 2019 - pt-br | Versão: 16.0.19127.20264 | Editor: Microsoft Corporation
+37. Microsoft OLE DB Driver for SQL Server | Versão: 18.7.4.0 | Editor: Microsoft Corporation
+38. Microsoft Report Viewer 2014 Runtime | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+39. Microsoft SQL Server 2005 (64-bit) | Versão: N/A | Editor: Microsoft Corporation
+40. Microsoft SQL Server 2005 Analysis Services (64-bit) (SQL2005) | Versão: 9.00.1399.06 | Editor: Microsoft Corporation
+41. Microsoft SQL Server 2005 Backward compatibility | Versão: 8.05.1054 | Editor: Microsoft Corporation
+42. Microsoft SQL Server 2005 Tools (64-bit) | Versão: 9.00.1399.06 | Editor: Microsoft Corporation
+43. Microsoft SQL Server 2008 R2 Management Objects | Versão: 10.51.2500.0 | Editor: Microsoft Corporation
+44. Microsoft SQL Server 2012 Native Client  | Versão: 11.0.2100.60 | Editor: Microsoft Corporation
+45. Microsoft SQL Server 2014 (64 bits) | Versão: N/A | Editor: N/A
+46. Microsoft SQL Server 2014 Transact-SQL ScriptDom  | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+47. Microsoft SQL Server 2022 (64-bit) | Versão: N/A | Editor: N/A
+48. Microsoft SQL Server 2022 RsFx Driver | Versão: 16.0.1000.6 | Editor: Microsoft Corporation
+49. Microsoft SQL Server 2022 Setup (English) | Versão: 16.0.4212.1 | Editor: Microsoft Corporation
+50. Microsoft SQL Server Native Client | Versão: 9.00.1399.06 | Editor: Microsoft Corporation
+51. Microsoft SQL Server Setup Support Files (English) | Versão: 9.00.1399.06 | Editor: Microsoft Corporation
+52. Microsoft SQL Server System CLR Types | Versão: 10.51.2500.0 | Editor: Microsoft Corporation
+53. Microsoft System CLR Types para SQL Server 2014 | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+54. Microsoft Teams Meeting Add-in for Microsoft Office | Versão: 1.24.31301 | Editor: Microsoft
+55. Microsoft Visual C++ 2010  x86 Runtime - 10.0.40219 | Versão: 10.0.40219 | Editor: Microsoft Corporation
+56. Microsoft Visual C++ 2013 x64 Additional Runtime - 12.0.40664 | Versão: 12.0.40664 | Editor: Microsoft Corporation
+57. Microsoft Visual C++ 2013 x64 Minimum Runtime - 12.0.40664 | Versão: 12.0.40664 | Editor: Microsoft Corporation
+58. Microsoft Visual C++ 2019 X64 Debug Runtime - 14.29.30157 | Versão: 14.29.30157 | Editor: Microsoft Corporation
+59. Microsoft Visual C++ 2019 X86 Debug Runtime - 14.29.30157 | Versão: 14.29.30157 | Editor: Microsoft Corporation
+60. Microsoft Visual C++ 2022 X64 Additional Runtime - 14.44.35211 | Versão: 14.44.35211 | Editor: Microsoft Corporation
+61. Microsoft Visual C++ 2022 X64 Minimum Runtime - 14.44.35211 | Versão: 14.44.35211 | Editor: Microsoft Corporation
+62. Microsoft Visual C++ 2022 X86 Additional Runtime - 14.44.35211 | Versão: 14.44.35211 | Editor: Microsoft Corporation
+63. Microsoft Visual C++ 2022 X86 Minimum Runtime - 14.44.35211 | Versão: 14.44.35211 | Editor: Microsoft Corporation
+64. Microsoft Visual Studio 2010 Shell (Isolated) - PTB | Versão: 10.0.40219 | Editor: Microsoft Corporation
+65. Microsoft Visual Studio Installer | Versão: 3.14.2086.54749 | Editor: Microsoft Corporation
+66. Microsoft Visual Studio Setup Configuration | Versão: 3.12.2140.44225 | Editor: Microsoft Corporation
+67. Microsoft Visual Studio Setup WMI Provider | Versão: 3.12.2140.44225 | Editor: Microsoft Corporation
+68. Navegador para SQL Server 2022 | Versão: 16.0.1000.6 | Editor: Microsoft Corporation
+69. Node.js | Versão: 22.19.0 | Editor: Node.js Foundation
+70. Npgsql 3.2.6 | Versão: 3.2.6-3 | Editor: EnterpriseDB
+71. NVIDIA Driver de áudio HD 1.3.30.1 | Versão: 1.3.30.1 | Editor: NVIDIA Corporation
+72. NVIDIA Driver de gráficos 342.01 | Versão: 342.01 | Editor: NVIDIA Corporation
+73. NVIDIA Driver do 3D Vision 342.01 | Versão: 342.01 | Editor: NVIDIA Corporation
+74. NVIDIA Install Application | Versão: 2.1002.197.1706 | Editor: NVIDIA Corporation
+75. NVIDIA Stereoscopic 3D Driver | Versão: 7.17.12.6514 | Editor: NVIDIA Corporation
+76. Office 16 Click-to-Run Extensibility Component | Versão: 16.0.19127.20154 | Editor: Microsoft Corporation
+77. Office 16 Click-to-Run Extensibility Component 64-bit Registration | Versão: 16.0.19127.20154 | Editor: Microsoft Corporation
+78. Office 16 Click-to-Run Licensing Component | Versão: 16.0.19127.20264 | Editor: Microsoft Corporation
+79. Office 16 Click-to-Run Localization Component | Versão: 16.0.19127.20154 | Editor: Microsoft Corporation
+80. On-premises data gateway | Versão: 3000.278.5 | Editor: Microsoft Corporation
+81. OpenVPN 2.4.6-I602  | Versão: 2.4.6-I602 | Editor: OpenVPN Technologies, Inc.
+82. Oracle VirtualBox 7.2.2 | Versão: 7.2.2 | Editor: Oracle and/or its affiliates
+83. Painel de controle da NVIDIA 342.01 | Versão: 342.01 | Editor: NVIDIA Corporation
+84. pgAgent_PG17 4.2.3 | Versão: 4.2.3-1 | Editor: EnterpriseDB
+85. PgBouncer 1.24.1 | Versão: 1.24.1-1 | Editor: EnterpriseDB
+86. pgJDBC 42.7.2 | Versão: 42.7.2-1 | Editor: EnterpriseDB
+87. Políticas do Microsoft SQL Server 2014  | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+88. PostgreSQL 17  | Versão: 17.6-1 | Editor: PostgreSQL Global Development Group
+89. psqlODBC 13.02.0000 | Versão: 13.02.0000-1 | Editor: EnterpriseDB
+90. Python 3.13.7 Add to Path (64-bit) | Versão: 3.13.7150.0 | Editor: Python Software Foundation
+91. Python 3.13.7 Core Interpreter (64-bit) | Versão: 3.13.7150.0 | Editor: Python Software Foundation
+92. Python 3.13.7 Development Libraries (64-bit) | Versão: 3.13.7150.0 | Editor: Python Software Foundation
+93. Python 3.13.7 Documentation (64-bit) | Versão: 3.13.7150.0 | Editor: Python Software Foundation
+94. Python 3.13.7 Executables (64-bit) | Versão: 3.13.7150.0 | Editor: Python Software Foundation
+95. Python 3.13.7 pip Bootstrap (64-bit) | Versão: 3.13.7150.0 | Editor: Python Software Foundation
+96. Python 3.13.7 Standard Library (64-bit) | Versão: 3.13.7150.0 | Editor: Python Software Foundation
+97. Python 3.13.7 Tcl/Tk Support (64-bit) | Versão: 3.13.7150.0 | Editor: Python Software Foundation
+98. Python 3.13.7 Test Suite (64-bit) | Versão: 3.13.7150.0 | Editor: Python Software Foundation
+99. Python Launcher | Versão: 3.13.7150.0 | Editor: Python Software Foundation
+100. Realtek High Definition Audio Driver | Versão: 6.0.1.7841 | Editor: Realtek Semiconductor Corp.
+101. Serv. de Compilador Transact-SQL do Microsoft SQL Server 2014  | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+102. Smart Connect | Versão: 8.0.0.114.001 | Editor: (C) Motorola
+103. Sped Fiscal ICMS IPI 5.0.3 | Versão: 5.0.3 | Editor: Receita Federal do Brasil
+104. SQL Server 2014 Client Tools | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+105. SQL Server 2014 Common Files | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+106. SQL Server 2014 Management Studio | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+107. SQL Server 2022 Batch Parser | Versão: 16.0.1000.6 | Editor: Microsoft Corporation
+108. SQL Server 2022 Common Files | Versão: 16.0.1000.6 | Editor: Microsoft Corporation
+109. SQL Server 2022 Connection Info | Versão: 16.0.1000.6 | Editor: Microsoft Corporation
+110. SQL Server 2022 Database Engine Services | Versão: 16.0.1000.6 | Editor: Microsoft Corporation
+111. SQL Server 2022 Database Engine Shared | Versão: 16.0.1000.6 | Editor: Microsoft Corporation
+112. SQL Server 2022 DMF | Versão: 16.0.1000.6 | Editor: Microsoft Corporation
+113. SQL Server 2022 Shared Management Objects | Versão: 16.0.1000.6 | Editor: Microsoft Corporation
+114. SQL Server 2022 Shared Management Objects Extensions | Versão: 16.0.1000.6 | Editor: Microsoft Corporation
+115. SQL Server 2022 SQL Diagnostics | Versão: 16.0.1000.6 | Editor: Microsoft Corporation
+116. SQL Server 2022 XEvent | Versão: 16.0.1000.6 | Editor: Microsoft Corporation
+117. SQL Server Management Studio 21 | Versão: 21.5.14 | Editor: Microsoft Corporation
+118. TAP-Windows 9.21.2 | Versão: 9.21.2 | Editor: N/A
+119. TortoiseSVN 1.14.9.29743 (64 bit) | Versão: 1.14.29743 | Editor: TortoiseSVN
+120. Visual Studio 2010 Prerequisites - English | Versão: 10.0.30319 | Editor: Microsoft Corporation
+121. vs_communitymsires | Versão: 17.14.36015 | Editor: Microsoft Corporation
+122. vs_communitysharedmsi | Versão: 17.14.36025 | Editor: Microsoft Corporation
+123. vs_communityx64msi | Versão: 17.14.36025 | Editor: Microsoft Corporation
+124. vs_CoreEditorFonts | Versão: 17.7.40001 | Editor: Microsoft Corporation
+125. vs_filehandler_amd64 | Versão: 17.14.36024 | Editor: Microsoft Corporation
+126. vs_filehandler_x86 | Versão: 17.14.36024 | Editor: Microsoft Corporation
+127. vs_FileTracker_Singleton | Versão: 17.14.36015 | Editor: Microsoft Corporation
+128. vs_githubprotocolhandlermsi | Versão: 17.14.36015 | Editor: Microsoft Corporation
+129. vs_minshellinteropsharedmsi | Versão: 17.14.36015 | Editor: Microsoft Corporation
+130. vs_minshellinteropx64msi | Versão: 17.14.36015 | Editor: Microsoft Corporation
+131. vs_minshellmsires | Versão: 17.14.36015 | Editor: Microsoft Corporation
+132. vs_minshellsharedmsi | Versão: 17.14.36024 | Editor: Microsoft Corporation
+133. vs_minshellx64msi | Versão: 17.14.36301 | Editor: Microsoft Corporation
+134. vs_ssmsprotocolselectormsi | Versão: 17.14.36015 | Editor: Microsoft Corporation
+135. vs_ssmsprotocolselectormsires | Versão: 17.14.36015 | Editor: Microsoft Corporation
+136. vs_vswebprotocolselectormsi | Versão: 17.14.36323 | Editor: Microsoft Corporation
+137. vs_vswebprotocolselectormsires | Versão: 17.14.36323 | Editor: Microsoft Corporation
+138. Windows Subsystem for Linux | Versão: 2.5.9.0 | Editor: Microsoft Corporation
+139. WinRAR 7.13 (64-bit) | Versão: 7.13.0 | Editor: win.rar GmbH

@@ -16,6 +16,12 @@ from ._impl import (
 	get_machine_name,
 )
 
+# Configurações públicas que podem ser sobrescritas pelo usuário do pacote
+# Controla se a barra lateral do PDF é desenhada no canvas (True por padrão)
+__pdf_sidebar_enabled__ = False
+# Mapeamento opcional de cores por campo usado no PDF: {'Nome do computador': '#FF0000', ...}
+__pdf_field_colors__ = {}
+
 __all__ = [
 	'main',
 	'write_report',
