@@ -348,15 +348,10 @@ class CSInfoGUI(tk.Tk):
 - Use 'Apelido' para identificar a máquina na lista e nos relatórios, campo obrigatório para que a máquina possa ser salva na lista.
 - Botões: Nova, Salvar, Excluir para gerenciar a lista de máquinas.
 - Coletar (F3): inicia a coleta; enquanto coleta, a interface fica bloqueada.
-- Atualizar (F5): re-checa o status ONLINE/OFFLINE das máquinas na lista.
-- Exportar (F10): gera relatórios em TXT e/ou PDF dentro da pasta Relatorio/PDF e Relatorio/TXT.
-- Para ações administrativas (Reiniciar/Desligar), forneça credenciais de administrador e verifique que a máquina esteja ONLINE.
-- O relatório em PDF aplica destaque (fundo cinza) a campos importantes como Nome do computador, Tipo, Versão do sistema operacional, Antivírus, Memória RAM total e Processador.
+- Atualizar (F5): realiza refresh para atualizar o status ONLINE/OFFLINE das máquinas na lista.
+- Exportar (F10): gera relatórios em TXT e/ou PDF dentro da pasta Relatorio/PDF e Relatorio/TXT, no diretório onde o aplicativo foi executado.
+- Com botão direito sobre o nome da máquina com status ONLINE é possível reiniciar ou desligar a máquina. Para tais ações são necessárias as credenciais de administrador da rede previamente definidas.
 
-Local dos arquivos: A pasta 'Relatorio' será criada no diretório onde o programa é executado.
-Atalhos: F3 (Coletar), F5 (Atualizar), F10 (Exportar).
-
-- Botão Abrir pasta de máquinas: abre o diretório onde fica salvo o arquivo json com a listagem de máquinas salvas.
 """
             txt.insert('1.0', doc)
             txt.configure(state='disabled')
@@ -365,7 +360,7 @@ Atalhos: F3 (Coletar), F5 (Atualizar), F10 (Exportar).
             btn.pack(pady=6)
         except Exception:
             try:
-                messagebox.showinfo('Ajuda', 'Uso do CFInfo:\n\nVerifique a documentação do aplicativo ou contate o suporte.')
+                messagebox.showinfo('Ajuda', "Uso do CFInfo:\n\n- Preencha o campo 'Máquina' com o nome do computador que deseja realizar a coleta de informações; deixe em branco para analisar a máquina local.\n- Use 'Apelido' para identificar a máquina na lista e nos relatórios, campo obrigatório para que a máquina possa ser salva na lista.\n- Botões: Nova, Salvar, Excluir para gerenciar a lista de máquinas.\n- Coletar (F3): inicia a coleta; enquanto coleta, a interface fica bloqueada.\n- Atualizar (F5): realiza refresh para atualizar o status ONLINE/OFFLINE das máquinas na lista.\n- Exportar (F10): gera relatórios em TXT e/ou PDF dentro da pasta Relatorio/PDF e Relatorio/TXT, no diretório onde o aplicativo foi executado.\n- Com botão direito sobre o nome da máquina com status ONLINE é possível reiniciar ou desligar a máquina. Para tais ações são necessárias as credenciais de administrador da rede previamente definidas.\n")
             except Exception:
                 pass
 

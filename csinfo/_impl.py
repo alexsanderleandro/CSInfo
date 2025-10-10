@@ -2365,7 +2365,8 @@ def write_pdf_report(path, lines, computer_name):
         # gap vertical padrão entre blocos de título
         TITLE_GAP = 8
         # Small gap specifically used after certain titles to tighten spacing
-        SMALL_TITLE_GAP = 4
+        # Reduced to 0 to remove extra spacing between certain consecutive sections
+        SMALL_TITLE_GAP = 0
         normal_style = ParagraphStyle('CustomNormal', parent=styles['Normal'], fontSize=9, spaceAfter=2, leading=11, textColor=colors.black, fontName='Helvetica')
         indented_style = ParagraphStyle('IndentedNormal', parent=styles['Normal'], fontSize=9, spaceAfter=2, leading=11, textColor=colors.black, fontName='Helvetica', leftIndent=12)
         double_indented_style = ParagraphStyle('DoubleIndentedNormal', parent=styles['Normal'], fontSize=9, spaceAfter=2, leading=11, textColor=colors.black, fontName='Helvetica', leftIndent=24)
@@ -2554,19 +2555,57 @@ def write_pdf_report(path, lines, computer_name):
                         bg = section_bg_colors.get(line_stripped, colors.Color(0.5, 0.5, 0.5))
                     except Exception:
                         bg = colors.Color(0.5, 0.5, 0.5)
+                    # ajustar paddings para títulos consecutivos específicos
+                    try:
+                        pad_top = TITLE_TOPPAD
+                        pad_bottom = TITLE_BOTTOMPAD
+                        # olhar próxima linha não-vazia para detectar título seguinte
+                        next_title = None
+                        for k in range(idx+1, len(iter_lines)):
+                            nxt = iter_lines[k].strip() if iter_lines[k] else ''
+                            if not nxt:
+                                continue
+                            if nxt in section_title_styles:
+                                next_title = nxt
+                            break
+                        # reduzir padding quando for o par SISTEMA -> HARDWARE
+                        if str(line_stripped).strip().upper() == 'INFORMAÇÕES DO SISTEMA' and next_title and str(next_title).strip().upper() == 'INFORMAÇÕES DE HARDWARE':
+                            pad_bottom = 0
+                        # também reduzir o top padding do HARDWARE se o anterior foi SISTEMA
+                        if str(line_stripped).strip().upper() == 'INFORMAÇÕES DE HARDWARE':
+                            # checar o título anterior simples (procura reversa)
+                            prev_title = None
+                            for k in range(idx-1, -1, -1):
+                                prv = iter_lines[k].strip() if iter_lines[k] else ''
+                                if not prv:
+                                    continue
+                                if prv in section_title_styles:
+                                    prev_title = prv
+                                break
+                            if prev_title and str(prev_title).strip().upper() == 'INFORMAÇÕES DO SISTEMA':
+                                pad_top = 0
+                    except Exception:
+                        pad_top = TITLE_TOPPAD
+                        pad_bottom = TITLE_BOTTOMPAD
                     tbl.setStyle(TableStyle([
                         ('BACKGROUND', (0, 0), (0, 0), bg),
                         ('LEFTPADDING', (0, 0), (0, 0), TITLE_LEFTPAD),
                         ('RIGHTPADDING', (0, 0), (0, 0), TITLE_RIGHTPAD),
-                        ('TOPPADDING', (0, 0), (0, 0), TITLE_TOPPAD),
-                        ('BOTTOMPADDING', (0, 0), (0, 0), TITLE_BOTTOMPAD),
+                        ('TOPPADDING', (0, 0), (0, 0), pad_top),
+                        ('BOTTOMPADDING', (0, 0), (0, 0), pad_bottom),
                     ]))
                     story.append(tbl)
                     try:
-                        gap = SMALL_TITLE_GAP if str(line_stripped).strip().upper() == 'INFORMAÇÕES DO SISTEMA' else TITLE_GAP
+                        # Para o par INFORMAÇÕES DO SISTEMA -> INFORMAÇÕES DE HARDWARE,
+                        # usar um Spacer negativo para sobrepor levemente os blocos
+                        if str(line_stripped).strip().upper() == 'INFORMAÇÕES DO SISTEMA' and next_title and str(next_title).strip().upper() == 'INFORMAÇÕES DE HARDWARE':
+                            # usar gap pequeno de 2 pontos entre os blocos
+                            story.append(Spacer(1, 2))
+                        else:
+                            gap = SMALL_TITLE_GAP if str(line_stripped).strip().upper() == 'INFORMAÇÕES DO SISTEMA' else TITLE_GAP
+                            story.append(Spacer(1, gap))
                     except Exception:
-                        gap = TITLE_GAP
-                    story.append(Spacer(1, gap))
+                        story.append(Spacer(1, TITLE_GAP))
                 except Exception:
                     try:
                         story.append(Paragraph(clean_text(line_stripped), section_title_styles.get(line_stripped, header_style)))
@@ -2597,6 +2636,8 @@ def write_pdf_report(path, lines, computer_name):
                 story.append(Paragraph(clean_text(line_stripped), indented_style))
             else:
                 important_prefixes = ['Nome do computador', 'Tipo', 'Versão do sistema operacional', 'Antivírus', 'Memória RAM total', 'Processador']
+                # Keys for which we want the VALUE (right-hand side) to be bolded
+                value_bold_keys = {'Versão do sistema operacional', 'Antivírus', 'Memória RAM total', 'Processador'}
                 if ':' in line_stripped:
                     left, right = line_stripped.split(':', 1)
                     left_clean = clean_text(left).strip()
@@ -2609,8 +2650,9 @@ def write_pdf_report(path, lines, computer_name):
                         except Exception:
                             color = None
                         try:
-                            special_bg_keys = {'Nome do computador', 'Tipo', 'Versão do sistema operacional', 'Antivírus', 'Memória RAM total', 'Processador'}
-                            if left_check in special_bg_keys or left_clean in special_bg_keys:
+                            # If this key is in the set that requires the VALUE to be bold,
+                            # render as: Label: <b>Value</b> (with optional color on the value).
+                            if left_check in value_bold_keys or left_clean in value_bold_keys:
                                 if color:
                                     paragraph_text = f"{left_clean}: <font color=\"{color}\"><b>{right_clean}</b></font>"
                                 else:
@@ -2619,6 +2661,7 @@ def write_pdf_report(path, lines, computer_name):
                                 continue
                         except Exception:
                             pass
+                        # Default behavior for other important prefixes: bold the label
                         if color:
                             paragraph_text = f"<font color=\"{color}\"><b>{left_clean}:</b> {right_clean}</font>"
                         else:
@@ -2813,10 +2856,16 @@ def write_pdf_report(path, lines, computer_name):
                                 story.append(tblw)
                                 # controlar gap (usar SMALL_TITLE_GAP se aplicável)
                                 try:
-                                    gap = SMALL_TITLE_GAP if str(base_title).strip().upper() == 'INFORMAÇÕES DO SISTEMA' else TITLE_GAP
+                                    # para detalhes, se a seção base for INFORMAÇÕES DO SISTEMA,
+                                    # também usar sobreposição leve para manter consistência visual
+                                    if str(base_title).strip().upper() == 'INFORMAÇÕES DO SISTEMA':
+                                        # usar gap pequeno de 2 pontos também no bloco de detalhes
+                                        story.append(Spacer(1, 2))
+                                    else:
+                                        gap = SMALL_TITLE_GAP if str(base_title).strip().upper() == 'INFORMAÇÕES DO SISTEMA' else TITLE_GAP
+                                        story.append(Spacer(1, gap))
                                 except Exception:
-                                    gap = TITLE_GAP
-                                story.append(Spacer(1, gap))
+                                    story.append(Spacer(1, TITLE_GAP))
                             except Exception:
                                 try:
                                     story.append(Paragraph(f"Detalhes: {clean_text(title_text)}", header_style))
@@ -2832,7 +2881,43 @@ def write_pdf_report(path, lines, computer_name):
                                     elif ln.startswith('  '):
                                         story.append(Paragraph(clean_text(ln.strip()), indented_style))
                                     else:
-                                        story.append(Paragraph(clean_text(ln.strip()), normal_style))
+                                        # Apply same key:value formatting as used in the body so
+                                        # specific keys have their VALUES rendered in bold.
+                                        try:
+                                            line_strip = ln.strip()
+                                            important_prefixes = ['Nome do computador', 'Tipo', 'Versão do sistema operacional', 'Antivírus', 'Memória RAM total', 'Processador']
+                                            value_bold_keys = {'Versão do sistema operacional', 'Antivírus', 'Memória RAM total', 'Processador'}
+                                            if ':' in line_strip:
+                                                left, right = line_strip.split(':', 1)
+                                                left_clean = clean_text(left).strip()
+                                                right_clean = clean_text(right).strip()
+                                                left_check = re.sub(r"\s+\d+$", '', left_clean)
+                                                color = None
+                                                try:
+                                                    color = pdf_field_colors.get(left_clean) or pdf_field_colors.get(left_check)
+                                                except Exception:
+                                                    color = None
+                                                try:
+                                                    if left_check in value_bold_keys or left_clean in value_bold_keys:
+                                                        if color:
+                                                            paragraph_text = f"{left_clean}: <font color=\"{color}\"><b>{right_clean}</b></font>"
+                                                        else:
+                                                            paragraph_text = f"{left_clean}: <b>{right_clean}</b>"
+                                                        story.append(Paragraph(paragraph_text, normal_style))
+                                                        continue
+                                                except Exception:
+                                                    pass
+                                                if left_check in important_prefixes or left_clean in important_prefixes:
+                                                    if color:
+                                                        paragraph_text = f"<font color=\"{color}\"><b>{left_clean}:</b> {right_clean}</font>"
+                                                    else:
+                                                        paragraph_text = f"<b>{left_clean}:</b> {right_clean}"
+                                                    story.append(Paragraph(paragraph_text, normal_style))
+                                                    continue
+                                            # fallback: plain paragraph
+                                            story.append(Paragraph(clean_text(line_strip), normal_style))
+                                        except Exception:
+                                            story.append(Paragraph(clean_text(ln.strip()), normal_style))
                                 except Exception:
                                     pass
                             story.append(Spacer(1, 12))
