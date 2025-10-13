@@ -14,6 +14,7 @@ Funcionalidades:
 import json
 import os
 import queue
+import tempfile
 import subprocess
 import sys
 import threading
@@ -24,15 +25,216 @@ import re
 from datetime import datetime
 import tkinter.font as tkfont
 import socket
-
+import importlib
+import traceback
 try:
     import csinfo
 except Exception:
     csinfo = None
-try:
-    from version import __version__
-except Exception:
-    __version__ = '0.0.0'
+    # Diagnostic logging helper (use temp dir so it works in frozen bundle)
+    try:
+        _DEBUG_LOG = os.path.join(tempfile.gettempdir(), 'csinfo_gui_debug.log')
+        def _debug_log(msg, exc=None, extra=None):
+            try:
+                ts = datetime.utcnow().isoformat() + 'Z'
+                with open(_DEBUG_LOG, 'a', encoding='utf-8') as _f:
+                    _f.write(f"[{ts}] {msg}\n")
+                    if extra is not None:
+                        try:
+                            _f.write(f"  EXTRA: {repr(extra)}\n")
+                        except Exception:
+                            pass
+                    if exc is not None:
+                        try:
+                            _f.write('  EXC:\n')
+                            _f.write(''.join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+    except Exception:
+        def _debug_log(*a, **k):
+            pass
+    _debug_log('Initial import of csinfo failed; entering fallback')
+    # Fallback: tentar carregar a implementação interna diretamente (útil no bundle PyInstaller)
+    try:
+        impl = None
+        # Primeira tentativa: garantir que, se estamos em um bundle PyInstaller,
+        # a pasta extraída (sys._MEIPASS) está no sys.path para permitir import
+        try:
+            if getattr(sys, 'frozen', False):
+                meip = getattr(sys, '_MEIPASS', None)
+                if meip and meip not in sys.path:
+                    sys.path.insert(0, meip)
+                    _debug_log('Inserted sys._MEIPASS into sys.path', extra=meip)
+                    try:
+                        _debug_log('Current sys.path snapshot', extra=list(sys.path)[:10])
+                    except Exception:
+                        pass
+                    try:
+                        _debug_log('sys.modules snapshot (first 30 keys)', extra=list(sys.modules.keys())[:30])
+                    except Exception:
+                        pass
+                    try:
+                        if meip and os.path.exists(meip):
+                            _debug_log('Listing _MEIPASS dir', extra=os.listdir(meip)[:50])
+                            csdir = os.path.join(meip, 'csinfo')
+                            if os.path.exists(csdir):
+                                _debug_log('Listing csinfo dir in _MEIPASS', extra=os.listdir(csdir)[:200])
+                    except Exception:
+                        pass
+                    try:
+                        import importlib
+                        try:
+                            import platform as _plat
+                            _debug_log('Platform module already importable', extra=repr(_plat))
+                        except Exception as _e:
+                            _debug_log('Platform import test failed', exc=_e)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        # Primeira tentativa: importar pelo nome do pacote (normal quando o package foi empacotado)
+        try:
+            impl = importlib.import_module('csinfo._impl')
+        except Exception:
+            _debug_log('importlib.import_module("csinfo._impl") failed', exc=sys.exc_info()[1])
+            impl = None
+
+        # Se falhar, procurar o arquivo _impl.py em locais prováveis e carregar por caminho
+        if impl is None:
+            candidates = []
+            # local base: bundle _MEIPASS quando congelado, senão pasta do script
+            bases = []
+            try:
+                if getattr(sys, 'frozen', False):
+                    bases.append(getattr(sys, '_MEIPASS', None))
+            except Exception:
+                pass
+            try:
+                bases.append(os.path.dirname(__file__))
+            except Exception:
+                pass
+            # também checar pastas comuns relativas ao código-fonte
+            try:
+                bases.append(os.path.join(os.path.dirname(__file__), 'csinfo'))
+                bases.append(os.path.join(os.path.dirname(__file__), '..', 'csinfo'))
+            except Exception:
+                pass
+
+            _debug_log('candidate bases for csinfo._impl', extra=bases)
+            for b in bases:
+                if not b:
+                    continue
+                p1 = os.path.join(b, 'csinfo', '_impl.py')
+                p2 = os.path.join(b, '_impl.py')
+                if os.path.exists(p1):
+                    candidates.append(p1)
+                if os.path.exists(p2):
+                    candidates.append(p2)
+
+            # última tentativa: procurar dentro do assets do bundle
+            try:
+                if getattr(sys, 'frozen', False):
+                    meip = getattr(sys, '_MEIPASS', None)
+                    if meip:
+                        p = os.path.join(meip, 'csinfo', '_impl.py')
+                        if os.path.exists(p):
+                            candidates.append(p)
+            except Exception:
+                pass
+
+            # carregar o primeiro candidato válido via importlib.util
+            _debug_log('candidates discovered', extra=candidates)
+            if candidates:
+                for cand in candidates:
+                    try:
+                        import importlib.util
+                        spec = importlib.util.spec_from_file_location('csinfo._impl', cand)
+                        if spec and spec.loader:
+                            mod = importlib.util.module_from_spec(spec)
+                            spec.loader.exec_module(mod)
+                            impl = mod
+                            break
+                    except Exception:
+                        _debug_log(f'failed to load candidate {cand}', exc=sys.exc_info()[1])
+                        impl = None
+                        continue
+
+        if impl:
+            import types
+            _shim = types.SimpleNamespace()
+            for _name in ('main', 'write_report', 'write_pdf_report', 'set_default_credential', 'clear_default_credential', 'safe_filename', 'get_machine_name'):
+                if hasattr(impl, _name):
+                    setattr(_shim, _name, getattr(impl, _name))
+            # version and app metadata
+            try:
+                setattr(_shim, '__version__', getattr(impl, '__version__', None))
+            except Exception:
+                pass
+            try:
+                setattr(_shim, '__logo_path__', getattr(impl, '__logo_path__', None))
+            except Exception:
+                pass
+            try:
+                setattr(_shim, '__app_name__', getattr(impl, '__app_name__', None))
+            except Exception:
+                pass
+            csinfo = _shim
+            _debug_log('Successfully loaded csinfo._impl and created shim', extra=list(getattr(_shim, '__dict__', {}).keys()))
+    except Exception:
+        _debug_log('Unexpected error while attempting fallback import', exc=sys.exc_info()[1])
+        csinfo = None
+import importlib
+
+
+def _load_version():
+    # Prefer reading version.py from the bundle or source tree first. This
+    # ensures the About dialog reflects the value in the repository's
+    # `version.py` regardless of whether the package `csinfo` is importable.
+    try:
+        if getattr(sys, 'frozen', False):
+            base = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+        else:
+            base = os.path.dirname(__file__)
+        cand = os.path.join(base, 'version.py')
+        if not os.path.exists(cand):
+            # try a sibling/parent path when running from source tree
+            cand = os.path.join(os.path.dirname(__file__), '..', 'version.py')
+            cand = os.path.normpath(cand)
+        if os.path.exists(cand):
+            try:
+                txt = open(cand, 'r', encoding='utf-8').read()
+                m = re.search(r"__version__\s*=\s*['\"]([^'\"]+)['\"]", txt)
+                if m:
+                    return m.group(1)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # Next, try to obtain version from the installed/top-level `version` module
+    try:
+        mod = importlib.import_module('version')
+        v = getattr(mod, '__version__', None)
+        if v:
+            return v
+    except Exception:
+        pass
+
+    # Then fall back to version exposed by csinfo package (if importable)
+    try:
+        if csinfo is not None:
+            v = getattr(csinfo, '__version__', None)
+            if v:
+                return v
+    except Exception:
+        pass
+
+    return '0.0.0'
+
+
+__version__ = _load_version()
 
 # assets
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), 'assets')
@@ -99,16 +301,38 @@ class CSInfoGUI(tk.Tk):
         # o rótulo interno (`self.title_lbl`) continua sendo exibido e centralizado
         self.title('CSInfo |  Inventário e controle de computadores')
         try:
-            # preferir ico para exe; para Tkinter usar PhotoImage para PNG
-            # preferir ICO no Windows para que o caption use o arquivo .ico (não usar PNG no caption)
-            if os.path.exists(APP_ICON_ICO) and sys.platform.startswith('win'):
+            # Usuário requisitou que o ícone mostrado na barra superior (caption)
+            # seja o PNG em assets/ico.png. Em builds "frozen" (PyInstaller)
+            # o arquivo pode ser extraído em sys._MEIPASS, então tentar esse caminho.
+            icon_path = APP_ICON_PNG
+            if getattr(sys, 'frozen', False):
+                base = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+                cand = os.path.join(base, os.path.basename(APP_ICON_PNG))
+                if os.path.exists(cand):
+                    icon_path = cand
+
+            # Se o PNG existir, preferir aplicá-lo via iconphoto (PhotoImage).
+            # Em algumas builds do Tk on Windows o caption pode ainda preferir .ico,
+            # por isso mantemos um fallback para APP_ICON_ICO.
+            if os.path.exists(icon_path):
                 try:
-                    self.iconbitmap(APP_ICON_ICO)
+                    img = tk.PhotoImage(file=icon_path)
+                    # False indica que o ícone aplica-se só à janela (não aos ícones de ícone da app global)
+                    self.iconphoto(False, img)
                 except Exception:
-                    pass
+                    # fallback: tentar ICO se disponível
+                    if os.path.exists(APP_ICON_ICO) and sys.platform.startswith('win'):
+                        try:
+                            self.iconbitmap(APP_ICON_ICO)
+                        except Exception:
+                            pass
             else:
-                # Não aplicar o PNG via iconphoto para evitar duplicação/overlap; manter PNG apenas para relatórios
-                pass
+                # PNG não encontrado — tentar ICO como último recurso
+                if os.path.exists(APP_ICON_ICO) and sys.platform.startswith('win'):
+                    try:
+                        self.iconbitmap(APP_ICON_ICO)
+                    except Exception:
+                        pass
         except Exception:
             pass
         self.geometry('980x640')
@@ -921,6 +1145,7 @@ class CSInfoGUI(tk.Tk):
                 pass
 
         def worker():
+            global csinfo
             try:
                 user = (self.ent_user.get() or '').strip()
                 passwd = (self.ent_pass.get() or '')
@@ -951,8 +1176,95 @@ class CSInfoGUI(tk.Tk):
                             except Exception:
                                 pass
                     else:
+                        # tentar recarregar dinamicamente o backend caso a importação
+                        # tenha falhado na inicialização (isso melhora o comportamento
+                        # em builds empacotados onde a ordem de extração pode variar)
+                        reloaded = False
                         try:
-                            self.queue.put(('line', 'Backend csinfo não disponível. Verifique a instalação do módulo csinfo.'))
+                            impl = None
+                            try:
+                                # if frozen, make sure extracted path is on sys.path
+                                if getattr(sys, 'frozen', False):
+                                    meip = getattr(sys, '_MEIPASS', None)
+                                    if meip and meip not in sys.path:
+                                        sys.path.insert(0, meip)
+                                        _debug_log('Inserted sys._MEIPASS into sys.path (worker)', extra=meip)
+                                impl = importlib.import_module('csinfo._impl')
+                            except Exception:
+                                _debug_log('worker: importlib.import_module("csinfo._impl") failed', exc=sys.exc_info()[1])
+                                impl = None
+
+                            if impl is None:
+                                # procurar arquivos prováveis e carregar por caminho
+                                candidates = []
+                                bases = []
+                                try:
+                                    if getattr(sys, 'frozen', False):
+                                        bases.append(getattr(sys, '_MEIPASS', None))
+                                except Exception:
+                                    pass
+                                try:
+                                    bases.append(os.path.dirname(__file__))
+                                except Exception:
+                                    pass
+                                try:
+                                    bases.append(os.path.join(os.path.dirname(__file__), 'csinfo'))
+                                    bases.append(os.path.join(os.path.dirname(__file__), '..', 'csinfo'))
+                                except Exception:
+                                    pass
+
+                                for b in bases:
+                                    if not b:
+                                        continue
+                                    p1 = os.path.join(b, 'csinfo', '_impl.py')
+                                    p2 = os.path.join(b, '_impl.py')
+                                    if os.path.exists(p1):
+                                        candidates.append(p1)
+                                    if os.path.exists(p2):
+                                        candidates.append(p2)
+
+                                try:
+                                    if getattr(sys, 'frozen', False):
+                                        meip = getattr(sys, '_MEIPASS', None)
+                                        if meip:
+                                            p = os.path.join(meip, 'csinfo', '_impl.py')
+                                            if os.path.exists(p):
+                                                candidates.append(p)
+                                except Exception:
+                                    pass
+
+                                if candidates:
+                                    for cand in candidates:
+                                        try:
+                                            import importlib.util as _il
+                                            spec = _il.spec_from_file_location('csinfo._impl', cand)
+                                            if spec and spec.loader:
+                                                mod = _il.module_from_spec(spec)
+                                                spec.loader.exec_module(mod)
+                                                impl = mod
+                                                break
+                                        except Exception:
+                                            impl = None
+                                            continue
+
+                            if impl:
+                                import types
+                                _shim = types.SimpleNamespace()
+                                for _name in ('main', 'write_report', 'write_pdf_report', 'set_default_credential', 'clear_default_credential', 'safe_filename', 'get_machine_name'):
+                                    if hasattr(impl, _name):
+                                        setattr(_shim, _name, getattr(impl, _name))
+                                try:
+                                    setattr(_shim, '__version__', getattr(impl, '__version__', None))
+                                except Exception:
+                                    pass
+                                csinfo = _shim
+                                reloaded = True
+                        except Exception:
+                            reloaded = False
+
+                        try:
+                            if not reloaded:
+                                self.queue.put(('line', 'Backend csinfo não disponível. Verifique a instalação do módulo csinfo.'))
                         except Exception:
                             pass
                     self.queue.put(('done', None))
