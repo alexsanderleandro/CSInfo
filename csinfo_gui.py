@@ -26,6 +26,32 @@ from datetime import datetime
 import tkinter.font as tkfont
 import socket
 import importlib
+
+# Hint for PyInstaller: ensure the csinfo package and its _impl module are
+# included in the frozen binary. The import is inside an `if False` block so
+# it never executes at runtime, but static analyzers (PyInstaller) will see
+# it and bundle the module into the PYZ. This avoids dynamic fallback loads
+# that can fail in certain extraction orders.
+try:
+    # Ensure static analyzers (PyInstaller) see the csinfo._impl module so it
+    # is bundled into the frozen application. If it's not present during
+    # runtime this will fail silently.
+    import csinfo._impl  # type: ignore
+except Exception:
+    pass
+
+# debug helper: grava um arquivo de diagnóstico em %TEMP% quando o exe falha em
+# localizar o backend. Usado apenas para investigação; arquivo em append.
+def _debug_log(msg):
+    try:
+        import tempfile
+        import datetime
+        fn = os.path.join(tempfile.gettempdir(), 'csinfo_gui_debug.log')
+        ts = datetime.datetime.now().isoformat()
+        with open(fn, 'a', encoding='utf-8') as fh:
+            fh.write(f"[{ts}] {msg}\n")
+    except Exception:
+        pass
 import traceback
 try:
     import csinfo
@@ -150,9 +176,30 @@ except Exception:
                 for cand in candidates:
                     try:
                         import importlib.util
+                        import types
+                        # Ensure the extracted package directory is on sys.path so
+                        # imports inside the loaded module (and stdlib/third-party)
+                        # resolve correctly. Create a small package stub in
+                        # sys.modules for 'csinfo' so that relative imports work
+                        # when we exec the module.
+                        pkg_dir = os.path.dirname(cand)
+                        if pkg_dir not in sys.path:
+                            sys.path.insert(0, pkg_dir)
+                            _debug_log('Inserted candidate package dir into sys.path', extra=pkg_dir)
+                        if 'csinfo' not in sys.modules:
+                            pkg = types.ModuleType('csinfo')
+                            pkg.__path__ = [pkg_dir]
+                            sys.modules['csinfo'] = pkg
+                            _debug_log('Inserted csinfo package stub into sys.modules', extra=pkg_dir)
+
                         spec = importlib.util.spec_from_file_location('csinfo._impl', cand)
                         if spec and spec.loader:
                             mod = importlib.util.module_from_spec(spec)
+                            # ensure package context
+                            try:
+                                mod.__package__ = 'csinfo'
+                            except Exception:
+                                pass
                             spec.loader.exec_module(mod)
                             impl = mod
                             break

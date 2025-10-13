@@ -2203,12 +2203,40 @@ def write_pdf_report(path, lines, computer_name):
             y_title = A4[1] - 0.7 * inch if doc_obj.page == 1 else A4[1] - 0.6 * inch
             # desenhar logotipo pequeno à esquerda, se disponível
             try:
-                import os
+                import os, sys
                 from reportlab.lib.utils import ImageReader
-                logo_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'ico.png')
-                logo_path = os.path.abspath(logo_path)
-                if os.path.exists(logo_path):
+                # construir lista de candidatos onde o asset pode viver
+                candidates = []
+                try:
+                    if getattr(sys, 'frozen', False):
+                        meip = getattr(sys, '_MEIPASS', None)
+                        if meip:
+                            candidates.append(os.path.join(meip, 'assets', 'ico.png'))
+                            candidates.append(os.path.join(meip, 'ico.png'))
+                except Exception:
+                    pass
+                # caminhos relativos ao pacote/fonte
+                try:
+                    base_dir = os.path.dirname(__file__)
+                    candidates.append(os.path.join(base_dir, '..', 'assets', 'ico.png'))
+                    candidates.append(os.path.join(base_dir, '..', 'ico.png'))
+                    candidates.append(os.path.join(base_dir, 'assets', 'ico.png'))
+                except Exception:
+                    pass
+
+                logo_path = None
+                for c in candidates:
                     try:
+                        c = os.path.abspath(c)
+                        if os.path.exists(c):
+                            logo_path = c
+                            break
+                    except Exception:
+                        continue
+
+                if logo_path:
+                    try:
+                        # desenhar a imagem no cabeçalho com largura pequena
                         img = ImageReader(logo_path)
                         iw, ih = img.getSize()
                         desired_w = 0.38 * inch
@@ -2218,7 +2246,8 @@ def write_pdf_report(path, lines, computer_name):
                         # subir levemente o logo para ficar alinhado com o título
                         logo_offset_up = 0.08 * inch
                         y_img = y_title - (desired_h / 2.0) + logo_offset_up
-                        canvas_obj.drawImage(img, x_img, y_img, width=desired_w, height=desired_h, preserveAspectRatio=True, mask='auto')
+                        # drawImage aceita caminho ou ImageReader; passar caminho evita problemas
+                        canvas_obj.drawImage(logo_path, x_img, y_img, width=desired_w, height=desired_h, preserveAspectRatio=True, mask='auto')
                     except Exception:
                         pass
             except Exception:

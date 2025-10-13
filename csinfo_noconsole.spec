@@ -3,10 +3,10 @@
 
 a = Analysis(
     ['csinfo_gui.py'],
-    pathex=['.'],
+    pathex=[],
     binaries=[],
     datas=[('version.py', '.')],
-    hiddenimports=['csinfo'],
+    hiddenimports=['reportlab', 'reportlab.platypus', 'reportlab.lib', 'reportlab.pdfgen', 'reportlab.pdfbase', 'reportlab.pdfbase.ttfonts', 'platform'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
