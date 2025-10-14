@@ -1576,6 +1576,26 @@ class CSInfoGUI(tk.Tk):
                                 self.tree.configure(state='disabled')
                             except Exception:
                                 pass
+                            # também bloquear handlers de eventos (clique, duplo-clique, teclado, botão direito)
+                            try:
+                                # salvar bindings atuais para restauração
+                                self._saved_tree_bindings = getattr(self, '_saved_tree_bindings', {}) or {}
+                                events = ('<Button-1>', '<Double-1>', '<<TreeviewSelect>>', '<Button-3>', '<Key>')
+                                for ev in events:
+                                    try:
+                                        cur = self.tree.bind(ev)
+                                    except Exception:
+                                        cur = None
+                                    # store only if not already stored
+                                    if ev not in self._saved_tree_bindings:
+                                        self._saved_tree_bindings[ev] = cur
+                                    try:
+                                        # bind no-op that stops event propagation
+                                        self.tree.bind(ev, lambda e: 'break')
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
                         else:
                             try:
                                 if getattr(self, '_saved_tree_selectmode', None) is not None:
@@ -1584,6 +1604,25 @@ class CSInfoGUI(tk.Tk):
                                 pass
                             try:
                                 self.tree.configure(state='normal')
+                            except Exception:
+                                pass
+                            # restaurar bindings salvos
+                            try:
+                                saved = getattr(self, '_saved_tree_bindings', {}) or {}
+                                for ev, val in saved.items():
+                                    try:
+                                        if val:
+                                            self.tree.bind(ev, val)
+                                        else:
+                                            # if there was no binding previously, unbind
+                                            self.tree.unbind(ev)
+                                    except Exception:
+                                        pass
+                                # clear saved bindings after restore
+                                try:
+                                    self._saved_tree_bindings = {}
+                                except Exception:
+                                    pass
                             except Exception:
                                 pass
                     except Exception:

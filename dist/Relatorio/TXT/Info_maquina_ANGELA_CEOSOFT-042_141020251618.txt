@@ -1,0 +1,272 @@
+﻿CEOsoftware Sistemas
+CSInfo - Inventário de hardware e software - v25.10.14 rev 1
+
+IDENTIFICAÇÃO
+Nome do computador: CEOSOFT-042
+Tipo: Desktop
+Gerado por: alex
+
+Relatório gerado em: 14/10/2025 - 16:15
+
+INFORMAÇÕES DO SISTEMA
+Versão do sistema operacional: Microsoft Windows 10 Pro (Version 10.0.19045) - 64 bits
+  Status do sistema operacional: Ativado
+
+Versão do Office: Microsoft Visual Studio 2010 Tools for Office Runtime (x64) 10.0.50903
+  Status do Office: Ativado
+
+SQL Server 1: Instância: SQL | Versão: 12.0.2000.8 | Status: Stopped
+
+Antivírus 1: Kaspersky | Status: Ativado
+Antivírus 2: Windows Defender | Status: Desconhecido
+
+Rede: Domínio: ceosoftwaread.net
+
+INFORMAÇÕES DE HARDWARE
+Memória RAM total: 4.0 GB
+  Pente de Memória 1: 2 GB | DDR3 | 1333 MHz | DIMM
+    Fabricante: Samsung
+  Pente de Memória 2: 2 GB | DDR3 | 1333 MHz | DIMM
+    Fabricante: Samsung
+
+Processador 1: Intel(R) Core(TM)2 Duo CPU     E7500  @ 2.93GHz
+  Cores: 2 físicos | 2 lógicos
+  Cache: L2: 3 MB | L3: N/A
+  Fabricante: GenuineIntel
+
+Disco 1: KINGSTON SA400S37240G ATA Device | Tamanho: 223.57 GB
+  Tipo: SSD | Interface: IDE
+Unidade C: (Sem rótulo) | Total: 199.85 GB | Usado: 194.23 GB | Livre: 5.62 GB | Sistema: NTFS
+Unidade D: (Sem rótulo) | Total: 23.14 GB | Usado: 16.32 GB | Livre: 6.82 GB | Sistema: NTFS
+Monitor 1: NÃO OBTIDO | Modelo: NÃO OBTIDO | Serial: NÃO OBTIDO
+Teclado conectado: SIM
+Mouse conectado: SIM
+Placa mãe: Dell Inc. | Modelo: 07N90W | Serial: ..BR108190490056.                  
+Placa de Rede 1: Broadcom NetLink (TM) Gigabit Ethernet | Fabricante: Broadcom Corporation | Velocidade: 100 Mbps | MAC: A4:BA:DB:08:16:C8
+Placa de Vídeo 1: BB Capture Driver | Fabricante: Blueberry Consultants | Memória: N/A | Tipo: Onboard (Integrada)
+Placa de Vídeo 2: NVIDIA GeForce 210  | Fabricante: NVIDIA | Memória: 1 GB | Tipo: Offboard (Dedicada)
+Impressora 1: Wondershare PDFelement | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Wondershare PDFelement
+Impressora 2: OneNote for Windows 10 | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Microsoft Software Printer Driver
+Impressora 3: OneNote | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Microsoft Software Printer Driver
+Impressora 4: NPI1F7468 (HP LaserJet Professional M1212nf MFP) | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: HP LaserJet Mono PCLmS Class Driver
+Impressora 5: Microsoft XPS Document Writer | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Microsoft XPS Document Writer v4
+Impressora 6: Fax | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: Microsoft Shared Fax Driver
+Impressora 7: ELGIN i9(USB) | Serial/ID: NÃO OBTIDO | Fabricante: NÃO OBTIDO | Modelo: ELGIN i9(USB)
+INFORMAÇÕES DE REDE
+Adaptador 1: Broadcom NetLink (TM) Gigabit Ethernet
+  IP: 192.168.0.142 | Gateway: 192.168.0.1 | DNS: 192.168.0.3, 192.168.0.4 | MAC: A4:BA:DB:08:16:C8
+SEGURANÇA DO SISTEMA
+Firewall:
+  Status: NÃO OBTIDO
+Windows Update:
+  2 atualizações pendentes
+CSInfo by CEOsoftware
+ADMINISTRADORES
+Administrador 1: CEOSOFT-042\Administrador
+Administrador 2: CEOSOFT-042\CEOSOFTWARE
+Administrador 3: CEOSOFTWAREAD\Admins. do domínio
+Administrador 4: CEOSOFTWAREAD\alex
+Administrador 5: CEOSOFTWAREAD\Angela.Joisciene
+Administrador 6: CEOSOFTWAREAD\Elmar.Meirelles
+Administrador 7: CEOSOFTWAREAD\Leandro.Magalhaes
+Administrador 8: CEOSOFTWAREAD\Marco.Aurelio
+Administrador 9: CEOSOFTWAREAD\Vinicius.Souza
+SOFTWARES INSTALADOS
+1.  Tools for .Net 3.5 | Versão: 3.11.50727 | Editor: Microsoft Corporation
+2.  Tools for .Net 3.5 - PTB Lang Pack | Versão: 3.11.50727 | Editor: Microsoft Corporation
+3. Arquivos de Suporte à Instalação do Microsoft SQL Server 2008  | Versão: 10.3.5500.0 | Editor: Microsoft Corporation
+4. Atualizações da NVIDIA 2.11.4.125 | Versão: 2.11.4.125 | Editor: NVIDIA Corporation
+5. BB TestAssistant 2 | Versão: N/A | Editor: Blueberry Software (UK) Ltd.
+6. Biblioteca de Autenticação do Active Directory para SQL Server | Versão: 14.0.1000.169 | Editor: Microsoft Corporation
+7. BraZip Central | Versão: 25.0.3 | Editor: BraZip Tecnologia
+8. CertiInstaller 1.4.0.3 | Versão: 1.4.0.3 | Editor: Certisign
+9. Data Dynamics ActiveReports Professional 2 | Versão: 2.3.0.1261 | Editor: Data Dynamics, Ltd.
+10. DECLAN-IPM | Versão: N/A | Editor: N/A
+11. Dell SupportAssist | Versão: 4.10.1.42635 | Editor: Dell Inc.
+12. Designer XAML para Microsoft Visual Studio 2015 - PTB | Versão: 14.0.23107 | Editor: Microsoft Corporation
+13. EFD Contribuições PVA | Versão: PVA | Editor: N/A
+14. ELGIN Printer Driver v-1.6.7 versão v-1.6.7 | Versão: v-1.6.7 | Editor: ELGIN
+15. ELGINUtilitySetup V1.2.2.24 | Versão: V1.2.2.24 | Editor: ELGIN
+16. ERP CEOSoftware 8_2 | Versão: 8.2 | Editor: CEOSoftware Sistemas de Informática
+17. Escrituração Digital EFD-Contribuições 6.0.2 | Versão: 6.0.2 | Editor: Receita Federal do Brasil
+18. FileZilla 3.69.1 | Versão: 3.69.1 | Editor: Tim Kosse
+19. GDR 2269 for SQL Server 2014 (KB3045324) (64-bit) | Versão: 12.0.2269.0 | Editor: Microsoft Corporation
+20. Google Chrome | Versão: 141.0.7390.66 | Editor: Google LLC
+21. Gravador VSS da Microsoft para SQL Server 2014 | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+22. Kaspersky | Versão: 21.21.7.384 | Editor: Kaspersky
+23. Kaspersky VPN | Versão: 21.13.5.506 | Editor: Kaspersky
+24. Microsoft .NET Framework 4 Multi-Targeting Pack | Versão: 4.0.30319 | Editor: Microsoft Corporation
+25. Microsoft .NET Framework 4.5 Multi-Targeting Pack | Versão: 4.5.50710 | Editor: Microsoft Corporation
+26. Microsoft .NET Framework 4.5.1 Multi-Targeting Pack | Versão: 4.5.50932 | Editor: Microsoft Corporation
+27. Microsoft .NET Framework 4.5.1 Multi-Targeting Pack (ENU) | Versão: 4.5.50932 | Editor: Microsoft Corporation
+28. Microsoft .NET Framework 4.5.1 SDK | Versão: 4.5.51641 | Editor: Microsoft Corporation
+29. Microsoft .NET Framework 4.5.1 SDK (ENU) | Versão: 4.5.51641 | Editor: Microsoft Corporation
+30. Microsoft .NET Framework 4.5.2 Multi-Targeting Pack | Versão: 4.5.51209 | Editor: Microsoft Corporation
+31. Microsoft .NET Framework 4.5.2 Multi-Targeting Pack (ENU) | Versão: 4.5.51209 | Editor: Microsoft Corporation
+32. Microsoft .NET Host - 5.0.17 (x64) | Versão: 40.68.31213 | Editor: Microsoft Corporation
+33. Microsoft .NET Host - 6.0.36 (x64) | Versão: 48.144.23141 | Editor: Microsoft Corporation
+34. Microsoft .NET Host - 6.0.36 (x86) | Versão: 48.144.23141 | Editor: Microsoft Corporation
+35. Microsoft .NET Host - 8.0.21 (x64) | Versão: 64.84.40925 | Editor: Microsoft Corporation
+36. Microsoft .NET Host FX Resolver - 5.0.17 (x64) | Versão: 40.68.31213 | Editor: Microsoft Corporation
+37. Microsoft .NET Host FX Resolver - 6.0.36 (x64) | Versão: 48.144.23141 | Editor: Microsoft Corporation
+38. Microsoft .NET Host FX Resolver - 6.0.36 (x86) | Versão: 48.144.23141 | Editor: Microsoft Corporation
+39. Microsoft .NET Host FX Resolver - 8.0.21 (x64) | Versão: 64.84.40925 | Editor: Microsoft Corporation
+40. Microsoft .NET Runtime - 5.0.17 (x64) | Versão: 40.68.31213 | Editor: Microsoft Corporation
+41. Microsoft .NET Runtime - 6.0.36 (x64) | Versão: 48.144.23141 | Editor: Microsoft Corporation
+42. Microsoft .NET Runtime - 6.0.36 (x86) | Versão: 48.144.23141 | Editor: Microsoft Corporation
+43. Microsoft .NET Runtime - 8.0.21 (x64) | Versão: 64.84.40925 | Editor: Microsoft Corporation
+44. Microsoft Access MUI (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+45. Microsoft Application Error Reporting | Versão: 12.0.6012.5000 | Editor: Microsoft Corporation
+46. Microsoft Build Tools 14.0 (amd64) | Versão: 14.0.23107 | Editor: Microsoft Corporation
+47. Microsoft Build Tools 14.0 (x86) | Versão: 14.0.23107 | Editor: Microsoft Corporation
+48. Microsoft Build Tools Language Resources 14.0 (amd64) | Versão: 14.0.23107 | Editor: Microsoft Corporation
+49. Microsoft Build Tools Language Resources 14.0 (x86) | Versão: 14.0.23107 | Editor: Microsoft Corporation
+50. Microsoft DCF MUI (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+51. Microsoft Edge | Versão: 141.0.3537.71 | Editor: Microsoft Corporation
+52. Microsoft Edge WebView2 Runtime | Versão: 141.0.3537.71 | Editor: Microsoft Corporation
+53. Microsoft Excel MUI (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+54. Microsoft Groove MUI (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+55. Microsoft Help Viewer 1.1 | Versão: 1.1.40219 | Editor: Microsoft Corporation
+56. Microsoft Help Viewer 1.1 Language Pack - PTB | Versão: 1.1.40219 | Editor: Microsoft Corporation
+57. Microsoft Help Viewer 2.2 | Versão: 2.2.23107 | Editor: Microsoft Corporation
+58. Microsoft InfoPath MUI (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+59. Microsoft Lync MUI (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+60. Microsoft ODBC Driver 11 for SQL Server | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+61. Microsoft ODBC Driver 13 for SQL Server | Versão: 14.0.1000.169 | Editor: Microsoft Corporation
+62. Microsoft Office 64-bit Components 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+63. Microsoft Office OSM MUI (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+64. Microsoft Office OSM UX MUI (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+65. Microsoft Office Professional Plus 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+66. Microsoft Office Proofing (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+67. Microsoft Office Proofing Tools 2013 - English | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+68. Microsoft Office Proofing Tools 2013 - Español | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+69. Microsoft Office Shared 64-bit MUI (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+70. Microsoft Office Shared MUI (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+71. Microsoft OneNote MUI (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+72. Microsoft Outlook MUI (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+73. Microsoft PowerPoint MUI (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+74. Microsoft Publisher MUI (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+75. Microsoft Report Viewer 2014 Runtime | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+76. Microsoft SQL Server 2008 R2 Management Objects | Versão: 10.51.2500.0 | Editor: Microsoft Corporation
+77. Microsoft SQL Server 2012 Native Client  | Versão: 11.3.6020.0 | Editor: Microsoft Corporation
+78. Microsoft SQL Server 2014 (64 bits) | Versão: N/A | Editor: N/A
+79. Microsoft SQL Server 2014 Management Objects  | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+80. Microsoft SQL Server 2014 RsFx Driver | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+81. Microsoft SQL Server 2014 Setup (English) | Versão: 12.0.2269.0 | Editor: Microsoft Corporation
+82. Microsoft SQL Server 2014 Transact-SQL Compiler Service  | Versão: 12.0.2269.0 | Editor: Microsoft Corporation
+83. Microsoft SQL Server 2014 Transact-SQL ScriptDom  | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+84. Microsoft SQL Server 2017 | Versão: N/A | Editor: N/A
+85. Microsoft SQL Server Data-Tier Application Framework (x86) - pt-BR | Versão: 14.0.4127.1 | Editor: Microsoft Corporation
+86. Microsoft SQL Server Management Studio - 17.9.1 | Versão: 14.0.17289.0 | Editor: Microsoft Corporation
+87. Microsoft SQL Server System CLR Types | Versão: 10.51.2500.0 | Editor: Microsoft Corporation
+88. Microsoft System CLR Types for SQL Server 2014 | Versão: 12.0.2402.11 | Editor: Microsoft Corporation
+89. Microsoft System CLR Types para SQL Server 2014 | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+90. Microsoft System CLR Types para SQL Server 2017 | Versão: 14.0.1000.169 | Editor: Microsoft Corporation
+91. Microsoft Teams Meeting Add-in for Microsoft Office | Versão: 1.25.14205 | Editor: Microsoft
+92. Microsoft Visual C++ 2010  x86 Runtime - 10.0.40219 | Versão: 10.0.40219 | Editor: Microsoft Corporation
+93. Microsoft Visual C++ 2013 x64 Additional Runtime - 12.0.21005 | Versão: 12.0.21005 | Editor: Microsoft Corporation
+94. Microsoft Visual C++ 2013 x64 Debug Runtime - 12.0.21005 | Versão: 12.0.21005 | Editor: Microsoft Corporation
+95. Microsoft Visual C++ 2013 x64 Minimum Runtime - 12.0.21005 | Versão: 12.0.21005 | Editor: Microsoft Corporation
+96. Microsoft Visual C++ 2013 x86 Additional Runtime - 12.0.21005 | Versão: 12.0.21005 | Editor: Microsoft Corporation
+97. Microsoft Visual C++ 2013 x86 Debug Runtime - 12.0.21005 | Versão: 12.0.21005 | Editor: Microsoft Corporation
+98. Microsoft Visual C++ 2013 x86 Minimum Runtime - 12.0.21005 | Versão: 12.0.21005 | Editor: Microsoft Corporation
+99. Microsoft Visual C++ 2015 x64 Debug Runtime - 14.0.23026 | Versão: 14.0.23026 | Editor: Microsoft Corporation
+100. Microsoft Visual C++ 2015 x86 Additional Runtime - 14.0.23026 | Versão: 14.0.23026 | Editor: Microsoft Corporation
+101. Microsoft Visual C++ 2015 x86 Debug Runtime - 14.0.23026 | Versão: 14.0.23026 | Editor: Microsoft Corporation
+102. Microsoft Visual C++ 2015 x86 Minimum Runtime - 14.0.23026 | Versão: 14.0.23026 | Editor: Microsoft Corporation
+103. Microsoft Visual C++ 2019 X64 Additional Runtime - 14.24.28127 | Versão: 14.24.28127 | Editor: Microsoft Corporation
+104. Microsoft Visual C++ 2019 X64 Minimum Runtime - 14.24.28127 | Versão: 14.24.28127 | Editor: Microsoft Corporation
+105. Microsoft Visual Studio 2010 Shell (Isolated) - PTB | Versão: 10.0.40219 | Editor: Microsoft Corporation
+106. Microsoft Visual Studio 2010 Tools for Office Runtime (x64) | Versão: 10.0.50903 | Editor: Microsoft Corporation
+107. Microsoft Visual Studio 2010 Tools for Office Runtime (x64) Language Pack - PTB | Versão: 10.0.50903 | Editor: Microsoft Corporation
+108. Microsoft Visual Studio 2015 Shell (Isolated) | Versão: 14.0.23107 | Editor: Microsoft Corporation
+109. Microsoft Visual Studio 2015 Shell (Isolated) Resources | Versão: 14.0.23107 | Editor: Microsoft Corporation
+110. Microsoft Visual Studio 2015 Shell (Minimum) | Versão: 14.0.23107 | Editor: Microsoft Corporation
+111. Microsoft Visual Studio 2015 Shell (Minimum) Interop Assemblies | Versão: 14.0.23107 | Editor: Microsoft Corporation
+112. Microsoft Visual Studio 2015 Shell (Minimum) Resources | Versão: 14.0.23107 | Editor: Microsoft Corporation
+113. Microsoft Visual Studio 2015 XAML Designer | Versão: 14.0.23107 | Editor: Microsoft Corporation
+114. Microsoft Visual Studio 2015 XAML Designer - ENU | Versão: 14.0.23107 | Editor: Microsoft Corporation
+115. Microsoft Visual Studio Services Hub | Versão: 1.0.23107.00 | Editor: Microsoft Corporation
+116. Microsoft Visual Studio Tools for Applications 2015 | Versão: 14.0.23829 | Editor: Microsoft Corporation
+117. Microsoft Visual Studio Tools for Applications 2015 Finalizer | Versão: 14.0.23829 | Editor: Microsoft Corporation
+118. Microsoft Visual Studio Tools for Applications 2015 Language Support | Versão: 14.0.23107.20 | Editor: Microsoft Corporation
+119. Microsoft Visual Studio Tools for Applications 2015 Language Support Finalizer | Versão: 14.0.23107.20 | Editor: Microsoft Corporation
+120. Microsoft Visual Studio Tools for Applications 2015 x64 Hosting Support | Versão: 14.0.23829 | Editor: Microsoft Corporation
+121. Microsoft Visual Studio Tools for Applications 2015 x86 Hosting Support | Versão: 14.0.23829 | Editor: Microsoft Corporation
+122. Microsoft Windows Desktop Runtime - 6.0.36 (x64) | Versão: 48.144.23186 | Editor: Microsoft Corporation
+123. Microsoft Windows Desktop Runtime - 6.0.36 (x86) | Versão: 48.144.23186 | Editor: Microsoft Corporation
+124. Microsoft Windows Desktop Runtime - 8.0.21 (x64) | Versão: 64.84.40919 | Editor: Microsoft Corporation
+125. Microsoft Word MUI (Portuguese (Brazil)) 2013 | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+126. Mozilla Firefox (x64 en-US) | Versão: 140.0 | Editor: Mozilla
+127. Mozilla Maintenance Service | Versão: 67.0 | Editor: Mozilla
+128. Notepad++ (64-bit x64) | Versão: 8.7.5 | Editor: Notepad++ Team
+129. NVIDIA Driver de controle do 3D Vision 340.50 | Versão: 340.50 | Editor: NVIDIA Corporation
+130. NVIDIA GeForce Experience 2.11.4.125 | Versão: 2.11.4.125 | Editor: NVIDIA Corporation
+131. NVIDIA GeForce Experience Service | Versão: 2.11.4.125 | Editor: NVIDIA Corporation
+132. NVIDIA Install Application | Versão: 2.1002.197.1706 | Editor: NVIDIA Corporation
+133. NVIDIA LED Visualizer 1.0 | Versão: 1.0 | Editor: NVIDIA Corporation
+134. NVIDIA Network Service | Versão: 2.4 | Editor: NVIDIA Corporation
+135. NVIDIA PhysX | Versão: 9.13.1220 | Editor: NVIDIA Corporation
+136. NVIDIA ShadowPlay 2.11.4.125 | Versão: 2.11.4.125 | Editor: NVIDIA Corporation
+137. NVIDIA Software do sistema PhysX 9.13.1220 | Versão: 9.13.1220 | Editor: NVIDIA Corporation
+138. NVIDIA Virtual Audio 1.2.41 | Versão: 1.2.41 | Editor: NVIDIA Corporation
+139. OpenVPN 2.4.6-I602  | Versão: 2.4.6-I602 | Editor: OpenVPN Technologies, Inc.
+140. Pacote de Idiomas do Microsoft Help Viewer 2.2 - PTB | Versão: 2.2.23107 | Editor: Microsoft Corporation
+141. Pacote de Idiomas do Microsoft Visual Studio 2010 Tools for Office Runtime (x64) - Português (Brasil) | Versão: 10.0.50903 | Editor: Microsoft Corporation
+142. Pacote de Idiomas do Shell do Microsoft Visual Studio 2015 (Isolado) - PTB | Versão: 14.0.23107.10 | Editor: Microsoft Corporation
+143. Painel de controle da NVIDIA 342.01 | Versão: 342.01 | Editor: NVIDIA Corporation
+144. Políticas do Microsoft SQL Server 2014  | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+145. Políticas do Microsoft SQL Server 2017  | Versão: 14.0.1000.169 | Editor: Microsoft Corporation
+146. PRN - Edite | Versão: 2.02.03 | Editor: PROCERGS -  Cia. de Processamento de Dados do Estado do Rio Grande do Sul
+147. Provedor Microsoft Analysis Services OLE DB | Versão: 15.0.800.90 | Editor: Microsoft Corporation
+148. Recursos de Shell do Microsoft Visual Studio 2015 (Isolado) | Versão: 14.0.23107 | Editor: Microsoft Corporation
+149. Recursos do Shell do Microsoft Visual Studio 2015 (Mínimo) | Versão: 14.0.23107 | Editor: Microsoft Corporation
+150. Revisores de Texto do Microsoft Office 2013 – Português do Brasil | Versão: 15.0.4569.1506 | Editor: Microsoft Corporation
+151. Roslyn Language Services - x86 | Versão: 14.0.23107 | Editor: Microsoft Corporation
+152. Service Pack 1 for Microsoft Office 2013 (KB2850036) 32-Bit Edition | Versão: N/A | Editor: MicrosoftP
+153. Serviço de Linguagem T-SQL do Microsoft SQL Server 2017  | Versão: 14.0.17289.0 | Editor: Microsoft Corporation
+154. SHIELD Streaming | Versão: 7.1.0280 | Editor: NVIDIA Corporation
+155. SHIELD Wireless Controller Driver | Versão: 2.11.4.125 | Editor: NVIDIA Corporation
+156. Skype versão 8.97 | Versão: 8.97 | Editor: Skype Technologies S.A.
+157. Sped Contábil 10.2.1 | Versão: 10.2.1 | Editor: Receita Federal do Brasil
+158. Sped Contábil PVA | Versão: PVA | Editor: N/A
+159. Sped ECF PVA | Versão: PVA | Editor: N/A
+160. Sped Fiscal 2.1.1-SNAPSHOT | Versão: 2.1.1-SNAPSHOT | Editor: N/A
+161. SQL Server 2014 Client Tools | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+162. SQL Server 2014 Common Files | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+163. SQL Server 2014 Database Engine Services | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+164. SQL Server 2014 Database Engine Shared | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+165. SQL Server 2014 Management Studio | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+166. SQL Server 2017 Batch Parser | Versão: 14.0.1000.169 | Editor: Microsoft Corporation
+167. SQL Server 2017 Client Tools Extensions | Versão: 14.0.1000.169 | Editor: Microsoft Corporation
+168. SQL Server 2017 Common Files | Versão: 14.0.1000.169 | Editor: Microsoft Corporation
+169. SQL Server 2017 Connection Info | Versão: 14.0.1000.169 | Editor: Microsoft Corporation
+170. SQL Server 2017 DMF | Versão: 14.0.1000.169 | Editor: Microsoft Corporation
+171. SQL Server 2017 Integration Services Scale Out Management Portal | Versão: 14.0.1000.169 | Editor: Microsoft Corporation
+172. SQL Server 2017 Management Studio Extensions | Versão: 14.0.1000.169 | Editor: Microsoft Corporation
+173. SQL Server 2017 Shared Management Objects | Versão: 14.0.1000.169 | Editor: Microsoft Corporation
+174. SQL Server 2017 Shared Management Objects Extensions | Versão: 14.0.1000.169 | Editor: Microsoft Corporation
+175. SQL Server 2017 SQL Diagnostics | Versão: 14.0.1000.169 | Editor: Microsoft Corporation
+176. SQL Server Browser para SQL Server 2014 | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+177. Sql Server Customer Experience Improvement Program | Versão: 12.0.2000.8 | Editor: Microsoft Corporation
+178. SQL Server Management Studio | Versão: 14.0.17289.0 | Editor: Microsoft Corporation
+179. SQL Server Management Studio for Analysis Services | Versão: 14.0.17289.0 | Editor: Microsoft Corporation
+180. SQL Server Management Studio for Analysis Services Localization | Versão: 14.0.17289.0 | Editor: Microsoft Corporation
+181. SQL Server Management Studio for Reporting Services | Versão: 14.0.17289.0 | Editor: Microsoft Corporation
+182. SQL Server Management Studio for Reporting Services Localization | Versão: 14.0.17289.0 | Editor: Microsoft Corporation
+183. SSMS Post Install Tasks | Versão: 14.0.17289.0 | Editor: Microsoft Corporation
+184. STAnexoXV - Cálculo da ST - Anexo XV do RICMS/MG versão 2.1.4.0 | Versão: 2.1.4.0 | Editor: SEF/MG
+185. Suporte a Idiomas do Microsoft Visual Studio Tools for Applications 2015 | Versão: 14.0.23107.20 | Editor: Microsoft Corporation
+186. Suporte a Idiomas do Microsoft Visual Studio Tools for Applications 2015 - Pacote de Idiomas PTB | Versão: 14.0.23107.20 | Editor: Microsoft Corporation
+187. TAP-Windows 9.21.2 | Versão: 9.21.2 | Editor: N/A
+188. TortoiseSVN 1.10.1.28295 (64 bit) | Versão: 1.10.28295 | Editor: TortoiseSVN
+189. Validador Sintegra 5.4.0 | Versão: N/A | Editor: Secretaria da Fazenda do Estado do Rio Grande do Sul
+190. Verificação de integridade do PC Windows | Versão: 3.1.2109.29003 | Editor: Microsoft Corporation
+191. Virtual Serial Ports Emulator | Versão: 0.938 | Editor: Eterlogic.com
+192. Visual Studio 2010 Prerequisites - English | Versão: 10.0.30319 | Editor: Microsoft Corporation
+193. Visual Studio 2015 Prerequisites | Versão: 14.0.23107 | Editor: Microsoft Corporation
+194. Visual Studio 2015 Prerequisites - ENU Language Pack | Versão: 14.0.23107 | Editor: Microsoft Corporation
+195. Visual Studio 2015 Prerequisites - PTB Language Pack | Versão: 14.0.23107 | Editor: Microsoft Corporation
+196. WinRAR 7.13 (64-bit) | Versão: 7.13.0 | Editor: win.rar GmbH
+197. WinZip 25.0 | Versão: 25.0.14273 | Editor: Corel Corporation
+198. Wondershare PDFelement ( Version 10.0.7 ) | Versão: 10.0.7 | Editor: Wondershare

@@ -3,6 +3,14 @@
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 import os
 
+# determine project root early so datas can reference files relative to it
+try:
+    project_root = os.path.abspath(os.path.dirname(__file__))
+except NameError:
+    # when PyInstaller executes the spec the __file__ variable may not be
+    # defined; fallback to the current working directory
+    project_root = os.path.abspath(os.getcwd())
+
 # collect all submodules and data files from the local `csinfo` package so
 # the dynamically-loaded backend (`csinfo._impl`) is bundled by PyInstaller.
 _hidden_csinfo = collect_submodules('csinfo')
@@ -32,14 +40,6 @@ try:
     _datas_csinfo = list(_datas_csinfo) + extra_datas
 except Exception:
     pass
-
-# ensure project root is in pathex so Analysis can find the local package
-try:
-    project_root = os.path.abspath(os.path.dirname(__file__))
-except NameError:
-    # when PyInstaller executes the spec the __file__ variable may not be
-    # defined; fallback to the current working directory
-    project_root = os.path.abspath(os.getcwd())
 
 a = Analysis(
     ['csinfo_gui.py'],

@@ -1,0 +1,8 @@
+﻿CEOsoftware Sistemas
+CSInfo - Inventário de hardware e software - v25.10.14 rev 1
+Gerado por: alex
+
+Relatório de teste
+Nome do computador: TEST-MACHINE
+Versão do sistema: TestOS 1.0
+Hardware: exemplo
