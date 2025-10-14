@@ -239,19 +239,57 @@ def _load_version():
     # Prefer reading version.py from the bundle or source tree first. This
     # ensures the About dialog reflects the value in the repository's
     # `version.py` regardless of whether the package `csinfo` is importable.
+    candidates = []
     try:
         if getattr(sys, 'frozen', False):
-            base = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
-        else:
-            base = os.path.dirname(__file__)
-        cand = os.path.join(base, 'version.py')
-        if not os.path.exists(cand):
-            # try a sibling/parent path when running from source tree
-            cand = os.path.join(os.path.dirname(__file__), '..', 'version.py')
-            cand = os.path.normpath(cand)
-        if os.path.exists(cand):
+            meip = getattr(sys, '_MEIPASS', None)
+            if meip:
+                candidates.append(os.path.join(meip, 'version.py'))
+            # also check the exe directory
             try:
-                txt = open(cand, 'r', encoding='utf-8').read()
+                candidates.append(os.path.join(os.path.dirname(sys.executable), 'version.py'))
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # runtime/source tree locations
+    try:
+        candidates.append(os.path.join(os.path.dirname(__file__), 'version.py'))
+        candidates.append(os.path.join(os.path.dirname(__file__), '..', 'version.py'))
+        candidates.append(os.path.join(os.getcwd(), 'version.py'))
+    except Exception:
+        pass
+
+    # Normalize and check each candidate
+    seen = set()
+    for cand in candidates:
+        try:
+            if not cand:
+                continue
+            cand = os.path.normpath(cand)
+            if cand in seen:
+                continue
+            seen.add(cand)
+            if os.path.exists(cand):
+                try:
+                    with open(cand, 'r', encoding='utf-8') as fh:
+                        txt = fh.read()
+                    m = re.search(r"__version__\s*=\s*['\"]([^'\"]+)['\"]", txt)
+                    if m:
+                        return m.group(1)
+                except Exception:
+                    continue
+        except Exception:
+            continue
+
+    # Try pkgutil.get_data for packaged resources (when version.py is a module)
+    try:
+        import pkgutil
+        data = pkgutil.get_data('', 'version.py')
+        if data:
+            try:
+                txt = data.decode('utf-8')
                 m = re.search(r"__version__\s*=\s*['\"]([^'\"]+)['\"]", txt)
                 if m:
                     return m.group(1)
@@ -278,6 +316,7 @@ def _load_version():
     except Exception:
         pass
 
+    # final fallback
     return '0.0.0'
 
 
@@ -609,11 +648,11 @@ class CSInfoGUI(tk.Tk):
     def _show_help(self):
         try:
             help_win = tk.Toplevel(self)
-            help_win.title('Ajuda - CFInfo')
+            help_win.title('Ajuda - CSInfo')
             help_win.geometry('640x420')
             help_win.transient(self)
             txt = ScrolledText(help_win, wrap='word', font=('Segoe UI', 10))
-            doc = """Uso do CFInfo:
+            doc = """Uso do CSInfo:
 
 - Preencha o campo 'Máquina' com o nome do computador que deseja realizar a coleta de informações; deixe em branco para analisar a máquina local.
 - Use 'Apelido' para identificar a máquina na lista e nos relatórios, campo obrigatório para que a máquina possa ser salva na lista.
@@ -632,17 +671,35 @@ class CSInfoGUI(tk.Tk):
             btn.pack(pady=6)
         except Exception:
             try:
-                messagebox.showinfo('Ajuda', "Uso do CFInfo:\n\n- Preencha o campo 'Máquina' com o nome do computador que deseja realizar a coleta de informações; deixe em branco para analisar a máquina local.\n- Use 'Apelido' para identificar a máquina na lista e nos relatórios, campo obrigatório para que a máquina possa ser salva na lista.\n- Botões: Nova, Salvar, Excluir para gerenciar a lista de máquinas.\n- Coletar (F3): inicia a coleta; enquanto coleta, a interface fica bloqueada.\n- Atualizar (F5): realiza refresh para atualizar o status ONLINE/OFFLINE das máquinas na lista.\n- Exportar (F10): gera relatórios em TXT e/ou PDF dentro da pasta Relatorio/PDF e Relatorio/TXT, no diretório onde o aplicativo foi executado.\n- Com botão direito sobre o nome da máquina com status ONLINE é possível reiniciar ou desligar a máquina. Para tais ações são necessárias as credenciais de administrador da rede previamente definidas.\n")
+                messagebox.showinfo('Ajuda', "Uso do CSInfo:\n\n- Preencha o campo 'Máquina' com o nome do computador que deseja realizar a coleta de informações; deixe em branco para analisar a máquina local.\n- Use 'Apelido' para identificar a máquina na lista e nos relatórios, campo obrigatório para que a máquina possa ser salva na lista.\n- Botões: Nova, Salvar, Excluir para gerenciar a lista de máquinas.\n- Coletar (F3): inicia a coleta; enquanto coleta, a interface fica bloqueada.\n- Atualizar (F5): realiza refresh para atualizar o status ONLINE/OFFLINE das máquinas na lista.\n- Exportar (F10): gera relatórios em TXT e/ou PDF dentro da pasta Relatorio/PDF e Relatorio/TXT, no diretório onde o aplicativo foi executado.\n- Com botão direito sobre o nome da máquina com status ONLINE é possível reiniciar ou desligar a máquina. Para tais ações são necessárias as credenciais de administrador da rede previamente definidas.\n")
             except Exception:
                 pass
 
     def _show_about(self):
         try:
-            info = f"CFInfo\nDesenvolvedor: CEOsoftware Sistemas de Informática Ltda\nVersão: {__version__}"
+            # tentar obter versão a partir de várias fontes para garantir
+            # que o valor em version.py seja exibido quando empacotado.
+            try:
+                ver = __version__
+            except Exception:
+                ver = None
+            try:
+                if (not ver or ver == '0.0.0') and csinfo is not None:
+                    v2 = getattr(csinfo, '__version__', None)
+                    if v2:
+                        ver = v2
+            except Exception:
+                pass
+            try:
+                if not ver or ver == '0.0.0':
+                    ver = _load_version()
+            except Exception:
+                pass
+            info = f"CSInfo\nDesenvolvedor: CEOsoftware Sistemas de Informática Ltda\nVersão: {ver}"
             messagebox.showinfo('Sobre o sistema', info)
         except Exception:
             try:
-                messagebox.showinfo('Sobre o sistema', 'CFInfo - Desenvolvedor: CEOsoftware Sistemas de Informática Ltda')
+                messagebox.showinfo('Sobre o sistema', 'CSInfo - Desenvolvedor: CEOsoftware Sistemas de Informática Ltda')
             except Exception:
                 pass
 
@@ -1295,6 +1352,42 @@ class CSInfoGUI(tk.Tk):
                                             impl = None
                                             continue
 
+                                # se ainda não encontrou, escrever debug minimal em arquivo
+                                try:
+                                    if impl is None:
+                                        try:
+                                            import tempfile
+                                            dbg_contents = []
+                                            dbg_contents.append('sys.frozen=%r\n' % getattr(sys, 'frozen', False))
+                                            dbg_contents.append("_MEIPASS=%r\n" % getattr(sys, '_MEIPASS', None))
+                                            dbg_contents.append('sys.path:\n')
+                                            for p in sys.path:
+                                                dbg_contents.append('  %r\n' % p)
+                                            dbg_contents.append('candidates:\n')
+                                            for c in candidates:
+                                                dbg_contents.append('  %r\n' % c)
+
+                                            # write to temp
+                                            dbg_path = os.path.join(tempfile.gettempdir(), 'csinfo_backend_debug.txt')
+                                            try:
+                                                with open(dbg_path, 'w', encoding='utf-8') as _dbg:
+                                                    _dbg.writelines(dbg_contents)
+                                            except Exception:
+                                                pass
+
+                                            # also try writing to Desktop for visibility
+                                            try:
+                                                desktop = os.path.join(os.path.expanduser('~'), 'Desktop')
+                                                dbg_path2 = os.path.join(desktop, 'csinfo_backend_debug.txt')
+                                                with open(dbg_path2, 'w', encoding='utf-8') as _dbg2:
+                                                    _dbg2.writelines(dbg_contents)
+                                            except Exception:
+                                                pass
+                                        except Exception:
+                                            pass
+                                except Exception:
+                                    pass
+
                             if impl:
                                 import types
                                 _shim = types.SimpleNamespace()
@@ -1464,6 +1557,40 @@ class CSInfoGUI(tk.Tk):
         ]
         for w in widgets:
             try:
+                # tratar Treeview de forma especial porque nem sempre aceita 'state' da mesma
+                # forma e precisamos também bloquear seleção interativa
+                if w is getattr(self, 'tree', None):
+                    try:
+                        if state == 'disabled':
+                            # salvar selectmode atual para restauração posterior
+                            try:
+                                self._saved_tree_selectmode = self.tree.cget('selectmode')
+                            except Exception:
+                                self._saved_tree_selectmode = None
+                            try:
+                                # prevenir seleção e interação
+                                self.tree.configure(selectmode='none')
+                            except Exception:
+                                pass
+                            try:
+                                self.tree.configure(state='disabled')
+                            except Exception:
+                                pass
+                        else:
+                            try:
+                                if getattr(self, '_saved_tree_selectmode', None) is not None:
+                                    self.tree.configure(selectmode=self._saved_tree_selectmode)
+                            except Exception:
+                                pass
+                            try:
+                                self.tree.configure(state='normal')
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    continue
+
+                # widgets padrão (Entry, Button, etc.) - muitos aceitam 'state'
                 if state == 'disabled':
                     try:
                         w.configure(state='disabled')

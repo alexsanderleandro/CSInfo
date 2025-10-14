@@ -2205,34 +2205,58 @@ def write_pdf_report(path, lines, computer_name):
             try:
                 import os, sys
                 from reportlab.lib.utils import ImageReader
-                # construir lista de candidatos onde o asset pode viver
-                candidates = []
+                # Primeiro, preferir um caminho explícito fornecido pelo frontend/backend
+                logo_path = None
                 try:
-                    if getattr(sys, 'frozen', False):
-                        meip = getattr(sys, '_MEIPASS', None)
-                        if meip:
-                            candidates.append(os.path.join(meip, 'assets', 'ico.png'))
-                            candidates.append(os.path.join(meip, 'ico.png'))
-                except Exception:
-                    pass
-                # caminhos relativos ao pacote/fonte
-                try:
-                    base_dir = os.path.dirname(__file__)
-                    candidates.append(os.path.join(base_dir, '..', 'assets', 'ico.png'))
-                    candidates.append(os.path.join(base_dir, '..', 'ico.png'))
-                    candidates.append(os.path.join(base_dir, 'assets', 'ico.png'))
+                    import csinfo as _cs
+                    lp = getattr(_cs, '__logo_path__', None)
+                    if lp:
+                        # se for relativo e estivermos congelados, tentar resolver em _MEIPASS
+                        try:
+                            if not os.path.isabs(lp) and getattr(sys, 'frozen', False):
+                                meip = getattr(sys, '_MEIPASS', None)
+                                if meip:
+                                    cand_lp = os.path.join(meip, os.path.basename(lp))
+                                    if os.path.exists(cand_lp):
+                                        logo_path = cand_lp
+                        except Exception:
+                            pass
+                        # se não resolvido, aceitar lp absoluto/relativo ao cwd
+                        try:
+                            if not logo_path and os.path.exists(lp):
+                                logo_path = lp
+                        except Exception:
+                            pass
                 except Exception:
                     pass
 
-                logo_path = None
-                for c in candidates:
+                # Se não houver logo_path declarado, procurar candidatos conhecidos
+                if not logo_path:
+                    candidates = []
                     try:
-                        c = os.path.abspath(c)
-                        if os.path.exists(c):
-                            logo_path = c
-                            break
+                        if getattr(sys, 'frozen', False):
+                            meip = getattr(sys, '_MEIPASS', None)
+                            if meip:
+                                candidates.append(os.path.join(meip, 'assets', 'ico.png'))
+                                candidates.append(os.path.join(meip, 'ico.png'))
                     except Exception:
-                        continue
+                        pass
+                    try:
+                        base_dir = os.path.dirname(__file__)
+                        candidates.append(os.path.join(base_dir, '..', 'assets', 'ico.png'))
+                        candidates.append(os.path.join(base_dir, '..', 'ico.png'))
+                        candidates.append(os.path.join(base_dir, 'assets', 'ico.png'))
+                    except Exception:
+                        pass
+
+                    for c in candidates:
+                        try:
+                            c = os.path.abspath(c)
+                            if os.path.exists(c):
+                                logo_path = c
+                                break
+                        except Exception:
+                            continue
 
                 if logo_path:
                     try:
