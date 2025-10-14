@@ -1,0 +1,2 @@
+('C:\\Users\\alex\\Documents\\Python\\VSCode\\CSInfo\\build\\CSInfo_FullDebug\\PYZ-00.pyz',
+ [])

@@ -621,7 +621,8 @@ class CSInfoGUI(tk.Tk):
 - Coletar (F3): inicia a coleta; enquanto coleta, a interface fica bloqueada.
 - Atualizar (F5): realiza refresh para atualizar o status ONLINE/OFFLINE das máquinas na lista.
 - Exportar (F10): gera relatórios em TXT e/ou PDF dentro da pasta Relatorio/PDF e Relatorio/TXT, no diretório onde o aplicativo foi executado.
-- Com botão direito sobre o nome da máquina com status ONLINE é possível reiniciar ou desligar a máquina. Para tais ações são necessárias as credenciais de administrador da rede previamente definidas.
+- Com botão direito sobre o nome da máquina com status ONLINE é possível reiniciar ou desligar a máquina. 
+- Para ações de coleta, reinicialização e desligamento de máquinas da rede são necessárias as credenciais de administrador da rede previamente definidas, bem como a ativação do protocolo de gerenciamento remoto para computadores Windows nas máquinas alvo (https://learn.microsoft.com/pt-br/windows/win32/winrm/installation-and-configuration-for-windows-remote-management).
 
 """
             txt.insert('1.0', doc)
