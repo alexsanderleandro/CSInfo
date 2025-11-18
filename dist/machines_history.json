@@ -1,0 +1,78 @@
+{
+  "machines": [
+    {
+      "name": "CEOSOFT-136",
+      "alias": "ALEXANDRE",
+      "online": true
+    },
+    {
+      "name": "CEOSOFT-059",
+      "alias": "ALEXSANDER",
+      "online": true
+    },
+    {
+      "name": "CEOSOFT-042",
+      "alias": "ANGELA",
+      "online": true
+    },
+    {
+      "name": "CEOSOFT-138",
+      "alias": "ANGELO",
+      "online": true
+    },
+    {
+      "name": "CEOSOFT-053",
+      "alias": "ELMAR",
+      "online": true
+    },
+    {
+      "name": "CEOSOFT-057",
+      "alias": "EMMANUEL",
+      "online": true
+    },
+    {
+      "name": "CEOSOFT-012",
+      "alias": "GISELIA",
+      "online": true
+    },
+    {
+      "name": "CEOSOFT-030",
+      "alias": "HEBERTY",
+      "online": true
+    },
+    {
+      "name": "CEOSOFT-001",
+      "alias": "JESSICA",
+      "online": true
+    },
+    {
+      "name": "CEOSOFT-006",
+      "alias": "LEANDRO",
+      "online": false
+    },
+    {
+      "name": "CEOSOFT-003",
+      "alias": "LIDIANE",
+      "online": true
+    },
+    {
+      "name": "CEOSOFT-149",
+      "alias": "MARCO AURELIO",
+      "online": true
+    },
+    {
+      "name": "CEOSOFT-033",
+      "alias": "PAINEL DO SUPORTE",
+      "online": true
+    },
+    {
+      "name": "CEOSOFT-031",
+      "alias": "VINICIUS",
+      "online": true
+    }
+  ],
+  "_meta": {
+    "sort_column": "alias",
+    "sort_reverse": false
+  }
+}

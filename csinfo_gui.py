@@ -26,6 +26,7 @@ from datetime import datetime
 import tkinter.font as tkfont
 import socket
 import importlib
+from version import __version__
 
 # Hint for PyInstaller: ensure the csinfo package and its _impl module are
 # included in the frozen binary. The import is inside an `if False` block so
@@ -466,11 +467,23 @@ class CSInfoGUI(tk.Tk):
         self.ent_computer = ttk.Entry(left, width=32, justify='center')
         self.ent_computer.pack()
         self.ent_computer.bind('<KeyRelease>', self._on_name_keyrelease)
+        try:
+            # quando o usuário sai do campo ou pressiona Enter, confirmar alteração
+            self.ent_computer.bind('<FocusOut>', lambda e: self._on_name_commit())
+            self.ent_computer.bind('<Return>', lambda e: self._on_name_commit())
+        except Exception:
+            pass
 
         ttk.Label(left, text='Apelido:').pack(anchor='w', pady=(8, 0))
         self.ent_alias = ttk.Entry(left, width=32, justify='center')
         self.ent_alias.pack()
         self.ent_alias.bind('<KeyRelease>', self._on_alias_keyrelease)
+        try:
+            # confirmar alteração de apelido ao perder foco ou pressionar Enter
+            self.ent_alias.bind('<FocusOut>', lambda e: self._on_alias_commit())
+            self.ent_alias.bind('<Return>', lambda e: self._on_alias_commit())
+        except Exception:
+            pass
 
         btn_fr = ttk.Frame(left)
         btn_fr.pack(pady=8, fill='x')
@@ -611,7 +624,7 @@ class CSInfoGUI(tk.Tk):
         self.lbl_progress = ttk.Label(bar_fr, text='Pronto')
         self.lbl_progress.pack(side='right')
 
-        rodape = tk.Label(self, text='CSInfo by CEOsoftware', font=('Segoe UI', 8), fg='#666')
+        rodape = tk.Label(self, text=f'CSInfo by CEOsoftware | Versão: {__version__}', font=('Segoe UI', 8), fg='#666')
         rodape.pack(side='bottom', pady=(0, 6), fill='x')
 
         # topo com logotipo, nome e subtítulo
@@ -886,6 +899,23 @@ class CSInfoGUI(tk.Tk):
             self.machine_list.append({'name': name, 'alias': alias, 'online': False})
         self.save_machine_list()
         try:
+            # reaplicar ordenação atual (se houver) para que a lista reflita mudanças de nome/apelido
+            if getattr(self, '_sort_column', None):
+                try:
+                    self._apply_sort(self._sort_column, self._sort_reverse)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            # após salvar, forçar refresh de status (ping) para atualizar a lista imediatamente
+            try:
+                self.refresh_machine_status()
+            except Exception:
+                pass
+        except Exception:
+            pass
+        try:
             # limpar saída e manter export desabilitado até que uma nova coleta ocorra
             try:
                 self.clear_output()
@@ -1014,6 +1044,116 @@ class CSInfoGUI(tk.Tk):
             self.ent_alias.insert(0, v)
             try:
                 self.ent_alias.icursor(pos)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _on_name_commit(self):
+        """Confirma alteração do nome da máquina quando o usuário sai do campo ou pressiona Enter.
+        Atualiza `machine_list`, salva, repopula a árvore e dispara refresh de status.
+        """
+        try:
+            new_name = (self.ent_computer.get() or '').strip().upper()
+            if not new_name:
+                return
+            sel = self.tree.selection()
+            if not sel:
+                return
+            try:
+                vals = self.tree.item(sel[0], 'values') or ()
+                old_name = str(vals[0]).strip().upper() if vals else None
+            except Exception:
+                old_name = None
+            if not old_name or old_name == new_name:
+                return
+            # atualizar entry correspondente em machine_list
+            try:
+                for m in self.machine_list:
+                    try:
+                        if str(m.get('name') or '').strip().upper() == old_name:
+                            m['name'] = new_name
+                            break
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            try:
+                self.save_machine_list()
+            except Exception:
+                pass
+            try:
+                self.populate_machine_tree()
+                # re-selecionar pelo novo nome
+                for child in self.tree.get_children():
+                    try:
+                        vals2 = self.tree.item(child, 'values')
+                        if vals2 and str(vals2[0]).strip().upper() == new_name:
+                            self.tree.selection_set(child)
+                            self.tree.see(child)
+                            break
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            try:
+                # atualizar status das máquinas após alterar nome
+                self.refresh_machine_status()
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _on_alias_commit(self):
+        """Confirma alteração do apelido quando o usuário sai do campo ou pressiona Enter.
+        Atualiza `machine_list`, salva, repopula a árvore e dispara refresh de status.
+        """
+        try:
+            new_alias = (self.ent_alias.get() or '').strip().upper()
+            if new_alias is None:
+                return
+            sel = self.tree.selection()
+            if not sel:
+                return
+            try:
+                vals = self.tree.item(sel[0], 'values') or ()
+                cur_name = str(vals[0]).strip().upper() if vals else None
+            except Exception:
+                cur_name = None
+            if not cur_name:
+                return
+            # atualizar entry correspondente em machine_list
+            try:
+                for m in self.machine_list:
+                    try:
+                        if str(m.get('name') or '').strip().upper() == cur_name:
+                            m['alias'] = new_alias
+                            break
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            try:
+                self.save_machine_list()
+            except Exception:
+                pass
+            try:
+                self.populate_machine_tree()
+                # re-selecionar pelo nome atual
+                for child in self.tree.get_children():
+                    try:
+                        vals2 = self.tree.item(child, 'values')
+                        if vals2 and str(vals2[0]).strip().upper() == cur_name:
+                            self.tree.selection_set(child)
+                            self.tree.see(child)
+                            break
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            try:
+                # atualizar status das máquinas após alterar apelido
+                self.refresh_machine_status()
             except Exception:
                 pass
         except Exception:
