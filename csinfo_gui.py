@@ -26,7 +26,11 @@ from datetime import datetime
 import tkinter.font as tkfont
 import socket
 import importlib
-from version import __version__
+try:
+    from version import __version__
+except Exception:
+    # versão pode não estar disponível no ambiente congelado; usar fallback
+    __version__ = None
 
 # Hint for PyInstaller: ensure the csinfo package and its _impl module are
 # included in the frozen binary. The import is inside an `if False` block so
@@ -330,6 +334,20 @@ APP_ICON_PNG = os.path.join(ASSETS_DIR, 'ico.png')
 APP_LOGO = APP_ICON_PNG  # usado no relatório PDF
 
 
+def _compute_machine_json_path():
+    """Compute the machine JSON path using same logic as CSInfoGUI._get_machine_json_path.
+    This is used by the splash loader before creating the full GUI."""
+    if sys.platform.startswith('win'):
+        base = r'C:\CEOSOFTWARE'
+    else:
+        base = os.path.join(get_appdata_path(), 'CSInfo')
+    try:
+        os.makedirs(base, exist_ok=True)
+    except Exception:
+        base = os.getcwd()
+    return os.path.join(base, 'machines_history.json')
+
+
 def get_appdata_path():
     if sys.platform.startswith('win'):
         return os.environ.get('APPDATA') or os.path.expanduser('~')
@@ -381,7 +399,7 @@ class Tooltip:
 
 
 class CSInfoGUI(tk.Tk):
-    def __init__(self):
+    def __init__(self, skip_initial_load=False):
         super().__init__()
         # título e icon
         # manter título na barra do sistema (visível em Alt+Tab e na caption)
@@ -439,9 +457,17 @@ class CSInfoGUI(tk.Tk):
 
         # UI
         self._build_ui()
-        self.load_machine_list()
+        # deferir carregamento inicial se solicitado (usado quando mostramos um splash primeiro)
+        if not skip_initial_load:
+            self.load_machine_list()
         self.protocol('WM_DELETE_WINDOW', self._on_close_attempt)
         self.after(100, self._process_queue)
+        # Carregar o backend csinfo em background para não bloquear a inicialização
+        try:
+            # aguardar levemente antes de iniciar o loader para garantir que a UI já esteja visível
+            self.after(200, lambda: threading.Thread(target=self._background_load_backend, daemon=True).start())
+        except Exception:
+            pass
 
     def _get_machine_json_path(self):
         # Alterado: usar pasta fixa em C:\CEOSOFTWARE quando rodando no Windows
@@ -736,6 +762,20 @@ class CSInfoGUI(tk.Tk):
             self.machine_list = []
             self._loaded_meta = {}
         self.populate_machine_tree()
+        # sinalizar início de carregamento para UI (mostra progresso enquanto os pings executam)
+        try:
+            self._loading_machines = True
+            # resetar indicador de progresso visual
+            try:
+                self.progress['value'] = 0
+            except Exception:
+                pass
+            try:
+                self.lbl_progress.configure(text='Carregando máquinas...')
+            except Exception:
+                pass
+        except Exception:
+            pass
         # aplicar ordenação carregada (se houver)
         try:
             meta = getattr(self, '_loaded_meta', {}) or {}
@@ -898,6 +938,11 @@ class CSInfoGUI(tk.Tk):
         else:
             self.machine_list.append({'name': name, 'alias': alias, 'online': False})
         self.save_machine_list()
+        # garantir refresh imediato da listagem ao salvar
+        try:
+            self.populate_machine_tree()
+        except Exception:
+            pass
         try:
             # reaplicar ordenação atual (se houver) para que a lista reflita mudanças de nome/apelido
             if getattr(self, '_sort_column', None):
@@ -1218,7 +1263,9 @@ class CSInfoGUI(tk.Tk):
 
     def _ping_worker(self):
         try:
-            for m in list(self.machine_list):
+            machines = list(self.machine_list)
+            total = len(machines)
+            for idx, m in enumerate(machines):
                 name = (m.get('name') or '').strip()
                 try:
                     on = self._ping_host(name)
@@ -1226,8 +1273,19 @@ class CSInfoGUI(tk.Tk):
                     status_text = 'ONLINE' if on else 'OFFLINE'
                     # enqueue an update for the UI
                     self.queue.put(('machine_status', name, status_text))
+                    # if we're in a loading phase, report progress
+                    try:
+                        if getattr(self, '_loading_machines', False):
+                            self.queue.put(('machine_load_progress', idx + 1, total))
+                    except Exception:
+                        pass
                 except Exception as ie:
                     # errors are silently ignored for individual hosts
+                    try:
+                        if getattr(self, '_loading_machines', False):
+                            self.queue.put(('machine_load_progress', idx + 1, total))
+                    except Exception:
+                        pass
                     pass
             # persist results
             self.save_machine_list()
@@ -1630,10 +1688,42 @@ class CSInfoGUI(tk.Tk):
                         pass
                     # não escrever logs de ping no painel para manter interface limpa
                     pass
+                elif kind == 'machine_load_progress':
+                    try:
+                        cur = int(item[1])
+                        total = int(item[2])
+                        pct = 0
+                        try:
+                            pct = int((cur / total) * 100) if total else 0
+                        except Exception:
+                            pct = 0
+                        try:
+                            self.progress['value'] = pct
+                        except Exception:
+                            pass
+                        try:
+                            self.lbl_progress.configure(text=f'Acessando a listagem de máquinas ({cur}/{total})')
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
                 elif kind == 'ping_done':
                     # limpar indicador visual de atualização
                     try:
                         self.lbl_ping_status.configure(text='')
+                    except Exception:
+                        pass
+                    try:
+                        if getattr(self, '_loading_machines', False):
+                            self._loading_machines = False
+                            try:
+                                self.lbl_progress.configure(text='Pronto')
+                            except Exception:
+                                pass
+                            try:
+                                self.progress['value'] = 0
+                            except Exception:
+                                pass
                     except Exception:
                         pass
                 elif kind == 'done':
@@ -1675,6 +1765,19 @@ class CSInfoGUI(tk.Tk):
                     self.btn_start.configure(text='Coletar (F3)')
                     self.lbl_progress.configure(text='Erro')
                     messagebox.showerror('Erro', str(item[1]))
+                elif kind == 'backend_loaded':
+                    # notificar usuário sobre resultado do carregamento do backend
+                    try:
+                        ok = bool(item[1]) if len(item) > 1 else False
+                    except Exception:
+                        ok = False
+                    try:
+                        if ok:
+                            self._append_output('CSInfo carregado.')
+                        else:
+                            self._append_output('CSInfo não foi carregado — funcionalidades reduzidas.')
+                    except Exception:
+                        pass
         except queue.Empty:
             pass
         except Exception:
@@ -2388,9 +2491,227 @@ class CSInfoGUI(tk.Tk):
         except Exception:
             pass
 
+    def _background_load_backend(self):
+        """Tenta carregar csinfo._impl em background e notifica a UI via queue.
+        Escreve logs em arquivo de debug usando _debug_log para análise de tempo.
+        """
+        try:
+            _debug_log('background loader: start')
+        except Exception:
+            pass
+        start = datetime.utcnow()
+        try:
+            impl = None
+            try:
+                # tentativa direta via importlib (deve funcionar se o módulo estiver no PYZ ou extraído)
+                impl = importlib.import_module('csinfo._impl')
+                try:
+                    _debug_log('background loader: importlib.import_module csinfo._impl succeeded')
+                except Exception:
+                    pass
+            except Exception as e:
+                try:
+                    _debug_log('background loader: importlib.import_module failed', exc=e)
+                except Exception:
+                    pass
+                impl = None
+
+            # se falhou, procurar arquivos candidatos e carregar por caminho
+            if impl is None:
+                candidates = []
+                bases = []
+                try:
+                    if getattr(sys, 'frozen', False):
+                        bases.append(getattr(sys, '_MEIPASS', None))
+                except Exception:
+                    pass
+                try:
+                    bases.append(os.path.dirname(__file__))
+                    bases.append(os.path.join(os.path.dirname(__file__), 'csinfo'))
+                except Exception:
+                    pass
+
+                for b in bases:
+                    if not b:
+                        continue
+                    p1 = os.path.join(b, 'csinfo', '_impl.py')
+                    p2 = os.path.join(b, '_impl.py')
+                    if os.path.exists(p1):
+                        candidates.append(p1)
+                    if os.path.exists(p2):
+                        candidates.append(p2)
+
+                for cand in candidates:
+                    try:
+                        import importlib.util as _il
+                        spec = _il.spec_from_file_location('csinfo._impl', cand)
+                        if spec and spec.loader:
+                            mod = _il.module_from_spec(spec)
+                            spec.loader.exec_module(mod)
+                            impl = mod
+                            try:
+                                _debug_log(f'background loader: loaded impl from candidate {cand}')
+                            except Exception:
+                                pass
+                            break
+                    except Exception as e:
+                        try:
+                            _debug_log(f'background loader: failed candidate {cand}', exc=e)
+                        except Exception:
+                            pass
+                        impl = None
+
+            if impl:
+                import types
+                _shim = types.SimpleNamespace()
+                for _name in ('main', 'write_report', 'write_pdf_report', 'set_default_credential', 'clear_default_credential', 'safe_filename', 'get_machine_name'):
+                    if hasattr(impl, _name):
+                        setattr(_shim, _name, getattr(impl, _name))
+                try:
+                    setattr(_shim, '__version__', getattr(impl, '__version__', None))
+                except Exception:
+                    pass
+                globals()['csinfo'] = _shim
+                try:
+                    _debug_log('background loader: shim created and assigned to csinfo')
+                except Exception:
+                    pass
+                try:
+                    self.queue.put(('backend_loaded', True))
+                    self.queue.put(('line', 'Backend carregado com sucesso.'))
+                except Exception:
+                    pass
+            else:
+                try:
+                    _debug_log('background loader: impl not found')
+                except Exception:
+                    pass
+                try:
+                    self.queue.put(('backend_loaded', False))
+                    self.queue.put(('line', 'Backend não disponível após tentativa em background.'))
+                except Exception:
+                    pass
+        except Exception as e:
+            try:
+                _debug_log('background loader: unexpected error', exc=e)
+            except Exception:
+                pass
+            try:
+                self.queue.put(('backend_loaded', False))
+            except Exception:
+                pass
+        finally:
+            try:
+                end = datetime.utcnow()
+                _debug_log('background loader duration (s): %0.3f' % ((end - start).total_seconds()))
+            except Exception:
+                pass
+
 
 def main():
-    app = CSInfoGUI()
+    # Mostrar splash que carrega as máquinas antes de abrir a janela principal
+    def _ping_host_local(host):
+        if not host:
+            return False
+        host = host.strip()
+        try:
+            if sys.platform.startswith('win'):
+                creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+                proc = subprocess.run(['ping', '-n', '1', '-w', '1000', host], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
+                return proc.returncode == 0
+            else:
+                proc = subprocess.run(['ping', '-c', '1', '-W', '1', host], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return proc.returncode == 0
+        except Exception:
+            return False
+
+    def show_splash_and_load():
+        machines = []
+        path = _compute_machine_json_path()
+        try:
+            if os.path.exists(path):
+                with open(path, 'r', encoding='utf-8') as fh:
+                    data = json.load(fh)
+                    if isinstance(data, list):
+                        machines = data
+                    elif isinstance(data, dict):
+                        machines = data.get('machines', []) if isinstance(data.get('machines', []), list) else []
+        except Exception:
+            machines = []
+
+        # UI do splash
+        root = tk.Tk()
+        try:
+            # Mensagem de fallback mostrada imediatamente ao iniciar o executável
+            # Mudado para o texto genérico solicitado pelo usuário: "Carregando informações"
+            root.title('CSInfo - Carregando módulo')
+            root.geometry('480x120')
+            root.resizable(False, False)
+            frm = ttk.Frame(root, padding=12)
+            frm.pack(fill='both', expand=True)
+            lbl = ttk.Label(frm, text='Carregando informações de máquinas', font=('Segoe UI', 10))
+            lbl.pack(pady=(4, 8))
+            pb = ttk.Progressbar(frm, orient='horizontal', mode='determinate', length=420)
+            pb.pack(pady=(2, 8))
+            st = ttk.Label(frm, text='0/0')
+            st.pack()
+        except Exception:
+            pass
+
+        total = max(1, len(machines))
+
+        def _worker():
+            for idx, m in enumerate(machines):
+                name = (m.get('name') or '').strip()
+                ok = _ping_host_local(name)
+                try:
+                    m['online'] = bool(ok)
+                except Exception:
+                    pass
+                # atualizar UI via after
+                try:
+                    root.after(0, lambda i=idx: pb.configure(value=int(((i + 1) / total) * 100)))
+                    root.after(0, lambda i=idx: st.configure(text=f"{i+1}/{total}"))
+                except Exception:
+                    pass
+            # persistir resultados (opcional)
+            try:
+                base = os.path.dirname(path)
+                os.makedirs(base, exist_ok=True)
+                tosave = {'machines': machines}
+                with open(path, 'w', encoding='utf-8') as fh:
+                    json.dump(tosave, fh, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+            try:
+                root.after(100, root.destroy)
+            except Exception:
+                try:
+                    root.destroy()
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+        try:
+            root.mainloop()
+        except Exception:
+            pass
+        return machines
+
+    machines = show_splash_and_load()
+    # criar a janela principal sem o carregamento inicial (já fizemos)
+    app = CSInfoGUI(skip_initial_load=True)
+    try:
+        app.machine_list = machines or []
+        app.populate_machine_tree()
+        # iniciar o ping worker agora que a UI principal está pronta
+        try:
+            threading.Thread(target=app._ping_worker, daemon=True).start()
+        except Exception:
+            pass
+    except Exception:
+        pass
     app.mainloop()
 
 

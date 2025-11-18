@@ -287,6 +287,9 @@
   ('pickle',
    'C:\\Users\\alex\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\pickle.py',
    'PYMODULE'),
+  ('pkgutil',
+   'C:\\Users\\alex\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\pkgutil.py',
+   'PYMODULE'),
   ('platform',
    'C:\\Users\\alex\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\platform.py',
    'PYMODULE'),
@@ -388,4 +391,7 @@
    'PYMODULE'),
   ('zipfile._path.glob',
    'C:\\Users\\alex\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\zipfile\\_path\\glob.py',
+   'PYMODULE'),
+  ('zipimport',
+   'C:\\Users\\alex\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\zipimport.py',
    'PYMODULE')])

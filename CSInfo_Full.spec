@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['csinfo.py'],
+    ['csinfo_cli.py'],
     pathex=[],
     binaries=[],
     datas=[('assets', 'assets')],

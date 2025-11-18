@@ -9,7 +9,7 @@ a = Analysis(
     ['csinfo_gui.py'],
     pathex=['.'],
     binaries=[],
-    datas=[('assets', 'assets'), ('csinfo.py', '.')],
+    datas=[('assets', 'assets'), ('csinfo_cli.py', '.')],
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
