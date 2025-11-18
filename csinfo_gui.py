@@ -907,6 +907,21 @@ class CSInfoGUI(tk.Tk):
                     pass
         except Exception:
             pass
+
+        try:
+            # atualizar os campos da UI com os valores normalizados (MAIÚSCULAS)
+            try:
+                self.ent_computer.delete(0, tk.END)
+                self.ent_computer.insert(0, name)
+            except Exception:
+                pass
+            try:
+                self.ent_alias.delete(0, tk.END)
+                self.ent_alias.insert(0, alias)
+            except Exception:
+                pass
+        except Exception:
+            pass
         try:
             # após salvar, forçar refresh de status (ping) para atualizar a lista imediatamente
             try:
@@ -1024,30 +1039,14 @@ class CSInfoGUI(tk.Tk):
 
     # UI helpers
     def _on_name_keyrelease(self, event=None):
-        try:
-            v = (self.ent_computer.get() or '').upper()
-            pos = self.ent_computer.index(tk.INSERT)
-            self.ent_computer.delete(0, tk.END)
-            self.ent_computer.insert(0, v)
-            try:
-                self.ent_computer.icursor(pos)
-            except Exception:
-                pass
-        except Exception:
-            pass
+        # não converter para maiúsculas enquanto o usuário digita;
+        # a conversão passa a ocorrer apenas ao salvar/confirmar.
+        return
 
     def _on_alias_keyrelease(self, event=None):
-        try:
-            v = (self.ent_alias.get() or '').upper()
-            pos = self.ent_alias.index(tk.INSERT)
-            self.ent_alias.delete(0, tk.END)
-            self.ent_alias.insert(0, v)
-            try:
-                self.ent_alias.icursor(pos)
-            except Exception:
-                pass
-        except Exception:
-            pass
+        # não converter para maiúsculas enquanto o usuário digita;
+        # a conversão passa a ocorrer apenas ao salvar/confirmar.
+        return
 
     def _on_name_commit(self):
         """Confirma alteração do nome da máquina quando o usuário sai do campo ou pressiona Enter.
